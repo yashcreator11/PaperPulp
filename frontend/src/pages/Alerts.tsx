@@ -10,10 +10,11 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { Download, TrendingUp, AlertTriangle, Clock, Activity } from "lucide-react";
+import { Download, TrendingUp, AlertTriangle, Clock, Activity, Sparkles } from "lucide-react";
 import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
 import { useParams } from "react-router-dom";
+import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 
 
 
@@ -83,6 +84,7 @@ const getSeverity = (percent: number) => {
 // -------------------- Component --------------------
 export default function AlertsAnalyticsPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
   const [signalFilter, setSignalFilter] = useState("ALL");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [deviationRange, setDeviationRange] = useState([0, 1000]);
@@ -477,25 +479,45 @@ const [fromUtc, toUtc] = useMemo(() => {
                 </div>
               </div>
 
-              <div className="pt-2 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-600">Deviation</span>
-                  <span className="text-lg font-bold text-blue-600">
-                    {a.deviationPercent}%
-                  </span>
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Deviation</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      {a.deviationPercent}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-right text-gray-600 mb-2.5">
+                    {a.deviationDirection === "UP"
+                      ? "↑ Over Threshold"
+                      : a.deviationDirection === "DOWN"
+                      ? "↓ Under Threshold"
+                      : "Within Range"}
+                  </p>
+
+                  <Button
+                    size="sm"
+                    className="w-full text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                    onClick={() =>
+                      setSelectedAlertForRca({
+                        alertId: a.alertId,
+                        assetName: a.assetName,
+                        signalName: a.signalName,
+                        severity: a.severity,
+                        observedValue: a.maxObservedValue ?? a.minObservedValue,
+                        thresholdValue: a.maxThreshold ?? a.minThreshold,
+                        deviationPercent: a.deviationPercent,
+                        timestamp: a.alertStartUtc,
+                      })
+                    }
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Investigate with AI RCA
+                  </Button>
                 </div>
-                <p className="text-xs text-right text-gray-600">
-                  {a.deviationDirection === "UP"
-                    ? "↑ Over Threshold"
-                    : a.deviationDirection === "DOWN"
-                    ? "↓ Under Threshold"
-                    : "Within Range"}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
     )}
   </CardContent>
 </Card>
@@ -545,6 +567,13 @@ const [fromUtc, toUtc] = useMemo(() => {
 
         </div>
       </div>
+
+      {/* AI Root Cause Analysis (RCA) Modal */}
+      <RcaModal
+        isOpen={!!selectedAlertForRca}
+        onClose={() => setSelectedAlertForRca(null)}
+        alert={selectedAlertForRca}
+      />
     </div>
   );
 }

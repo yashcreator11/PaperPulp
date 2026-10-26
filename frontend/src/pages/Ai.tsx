@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Send, AlertCircle, Zap, Settings2, MessageSquare } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { useNavigate } from "react-router-dom";
 import AiApi from "@/api/aiApi";
 
 // Improved AI RCA Chat component
@@ -29,15 +29,15 @@ export default function AiRcaChat() {
   const typingRef = useRef<{ timer?: number | null }>({ timer: null });
 
   var { user } = useAuth();
-
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    return () => {
-      if (typingRef.current.timer) window.clearInterval(typingRef.current.timer as number);
-    };
-  }, []);
-
-  let navigate = useNavigate()
+    const prefill = location.state?.prefillPrompt;
+    if (prefill) {
+      setPrompt(prefill);
+    }
+  }, [location.state]);
 
   function parseYamlish(payload: string) {
     // Expected format from your example (payload is data string)
