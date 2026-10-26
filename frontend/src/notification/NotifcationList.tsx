@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNotifications } from "../context/NotificationContext";
-import { Bell ,Eye} from "lucide-react";
+import { Bell, Eye, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 
 export const NotificationList = () => {
   const {
@@ -15,6 +17,7 @@ export const NotificationList = () => {
 } = useNotifications();
 
   const [filter, setFilter] = useState<"all" | "read" | "unread">(activeTab);
+  const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
 
@@ -241,6 +244,28 @@ useEffect(() => {
                   <div>Min: <b>{fmt(data.min)}</b></div>
                   <div>Max: <b>{fmt(data.max)}</b></div>
                 </div>
+
+                <div className="mt-3 pt-2 border-t border-border flex items-center justify-end">
+                  <Button
+                    size="sm"
+                    className="text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                    onClick={() =>
+                      setSelectedAlertForRca({
+                        assetName: data.asset || notif.title || "Asset",
+                        signalName: data.signal || "Operational Variable",
+                        severity: data.status === "HIGH" ? "Critical" : "Medium",
+                        observedValue: data.value,
+                        thresholdValue: data.status === "HIGH" ? data.max : data.min,
+                        unit: data.unit,
+                        deviationPercent: data.percent ?? 24,
+                        timestamp: data.timestamp || notif.createdAt,
+                      })
+                    }
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Investigate with AI RCA
+                  </Button>
+                </div>
               </div>
             );
           }
@@ -265,6 +290,13 @@ useEffect(() => {
         </div>
       )}
       </div>
+
+      {/* AI Root Cause Analysis (RCA) Modal Dialog */}
+      <RcaModal
+        isOpen={!!selectedAlertForRca}
+        onClose={() => setSelectedAlertForRca(null)}
+        alert={selectedAlertForRca}
+      />
     </div>
   );
 };

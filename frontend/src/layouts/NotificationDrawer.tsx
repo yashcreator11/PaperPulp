@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNotifications } from "../context/NotificationContext";
-import { Bell, Check, Eye, X } from "lucide-react";
+import { Bell, Check, Eye, X, Sparkles } from "lucide-react";
 import {
     Sheet,
     SheetContent,
@@ -12,6 +12,7 @@ import {
     SheetOverlay,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 
 interface NotificationDrawerProps {
     open: boolean;
@@ -20,6 +21,7 @@ interface NotificationDrawerProps {
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, onOpenChange }) => {
     const { notifications, markAsRead, acknowledge } = useNotifications();
+    const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
 
     const fmt = (n: number | null | undefined) =>
         typeof n === "number" && Number.isFinite(n) ? (Math.round(n * 10) / 10).toLocaleString() : "-";
@@ -178,6 +180,28 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                                                     className={`h-full rounded-full ${isHigh ? "bg-red-500" : isLow ? "bg-blue-500" : "bg-gray-500"}`}
                                                 />
                                             </div>
+
+                                            <div className="mt-3 pt-2 border-t border-border/60">
+                                                <Button
+                                                    size="sm"
+                                                    className="w-full text-xs font-bold gap-1.5 h-7.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                                                    onClick={() => {
+                                                        setSelectedAlertForRca({
+                                                            assetName: data.asset || notif.title || "Asset",
+                                                            signalName: data.signal || "Operational Variable",
+                                                            severity: isHigh ? "Critical" : "Medium",
+                                                            observedValue: data.value,
+                                                            thresholdValue: isHigh ? data.max : data.min,
+                                                            unit: data.unit,
+                                                            deviationPercent: data.percent ?? 24,
+                                                            timestamp: data.timestamp || notif.createdAt,
+                                                        });
+                                                    }}
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5" />
+                                                    Investigate with AI RCA
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -200,6 +224,14 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                 </div>
             </SheetContent>
         </Sheet>
+
+        {/* AI Root Cause Analysis (RCA) Modal Dialog */}
+        <RcaModal
+            isOpen={!!selectedAlertForRca}
+            onClose={() => setSelectedAlertForRca(null)}
+            alert={selectedAlertForRca}
+        />
+        </>
     );
 };
 
