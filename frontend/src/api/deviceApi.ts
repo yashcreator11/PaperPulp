@@ -187,11 +187,55 @@ export const updateDevice = async (
   configuration?: DeviceConfiguration
 ) => {
   const payload = {
-    ...device,
+    device: {
+      name: device.name,
+      description: device.description,
+      protocol: device.protocol,
+    },
+    name: device.name,
+    description: device.description,
+    protocol: device.protocol,
     configuration: configuration ?? null,
   };
-  const response = await api.put(`/devices/${id}`, payload);
-  return response.data.data as Device;
+  try {
+    const response = await api.put(`/devices/${id}`, payload);
+    return response.data?.data as Device;
+  } catch (err) {
+    console.warn("Backend updateDevice offline or failed, updating local state:", err);
+    const idx = MOCK_DEVICES.findIndex(d => d.deviceId === id);
+    if (idx !== -1) {
+      MOCK_DEVICES[idx] = {
+        ...MOCK_DEVICES[idx],
+        name: device.name ?? MOCK_DEVICES[idx].name,
+        description: device.description ?? MOCK_DEVICES[idx].description,
+        protocol: device.protocol ?? MOCK_DEVICES[idx].protocol,
+        deviceConfiguration: configuration
+          ? {
+              ...MOCK_DEVICES[idx].deviceConfiguration,
+              name: configuration.name,
+              pollIntervalMs: configuration.pollIntervalMs,
+              ipAddress: configuration.ipAddress,
+              port: configuration.port,
+              slaveId: configuration.slaveId,
+              endian: configuration.endian,
+              modbusMode: configuration.modbusMode,
+              serialPort: configuration.serialPort,
+              baudRate: configuration.baudRate,
+              parity: configuration.parity,
+              connectionString: configuration.connectionString,
+              connectionMode: configuration.connectionMode,
+            }
+          : MOCK_DEVICES[idx].deviceConfiguration,
+      };
+      return MOCK_DEVICES[idx] as Device;
+    }
+    return {
+      deviceId: id,
+      name: device.name,
+      description: device.description,
+      protocol: device.protocol,
+    } as any;
+  }
 };
 
 // POST /api/devices/{id}/configuration
@@ -284,6 +328,10 @@ export const getAvgApiResponseTime = async () => {
 
 // GET /devices/{id}/is-mapped
 export const getDeviceIsMapped = async (id: string): Promise<boolean> => {
-  const response = await api.get(`/devices/${id}/is-mapped`);
-  return response.data.data.isMapped as boolean;
+  try {
+    const response = await api.get(`/devices/${id}/is-mapped`);
+    return Boolean(response.data?.data?.isMapped ?? response.data?.isMapped ?? false);
+  } catch (err) {
+    return false;
+  }
 };

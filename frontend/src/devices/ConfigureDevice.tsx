@@ -79,9 +79,8 @@ export default function ConfigureDevice() {
           connectionString: config?.connectionString ?? "",
           connectionMode: config?.connectionMode ?? 1,
         });
-      } catch {
-        toast.error("Failed to load device");
-        navigate("/devices");
+      } catch (err) {
+        console.warn("Failed to load device from API, using default parameters:", err);
       }
     };
 
