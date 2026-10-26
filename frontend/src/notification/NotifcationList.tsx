@@ -1,34 +1,52 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNotifications } from "../context/NotificationContext";
-import { Bell, Eye, Sparkles } from "lucide-react";
+import {
+  Bell,
+  Eye,
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle,
+  ShieldAlert,
+  Clock,
+  Filter,
+  Search,
+  CheckCheck,
+  TrendingUp,
+  Activity,
+  Layers,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 
 export const NotificationList = () => {
   const {
-  notifications,
-  markAllRead,
-  markRead,
-  activeTab,
-  setActiveTab,
-  loadMore,
-  hasMore,
-  loading,
-} = useNotifications();
+    notifications,
+    markAllRead,
+    markRead,
+    activeTab,
+    setActiveTab,
+    loadMore,
+    hasMore,
+    loading,
+  } = useNotifications();
 
-  const [filter, setFilter] = useState<"all" | "read" | "unread">(activeTab);
+  const [filter, setFilter] = useState<"all" | "unread" | "read" | "critical">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
-
   const fmt = (n: number | null | undefined) =>
-    typeof n === "number" && Number.isFinite(n)
-      ? (Math.round(n * 10) / 10).toLocaleString()
-      : "-";
+    typeof n === "number" && Number.isFinite(n) ? (Math.round(n * 10) / 10).toLocaleString() : "-";
 
-  const fmtDate = (iso: string | null | undefined) => {
+  const timeAgo = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "-";
     try {
-      return iso ? new Date(iso).toLocaleString() : "-";
+      const diffSec = (Date.now() - new Date(dateStr).getTime()) / 1000;
+      if (diffSec < 20) return "Just now";
+      if (diffSec < 60) return `${Math.floor(diffSec)}s ago`;
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+      if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+      return new Date(dateStr).toLocaleString();
     } catch {
       return "-";
     }
@@ -36,259 +54,434 @@ export const NotificationList = () => {
 
   const parsePayload = (notif: any) => {
     try {
-      return typeof notif.text === "string"
-        ? JSON.parse(notif.text)
-        : notif.text;
+      return typeof notif.text === "string" ? JSON.parse(notif.text) : notif.text;
     } catch {
       return null;
     }
   };
 
   const isResolvedLike = (data: any) =>
-    !!data && (typeof data.durationSeconds === "number" || (data.from && data.to));
+    !!data && (data.status === "NORMAL" || typeof data.durationSeconds === "number" || (data.from && data.to));
 
   const isStartLike = (data: any) =>
-    !!data &&
-    (!!data.status || typeof data.value === "number" || typeof data.percent === "number");
+    !!data && !isResolvedLike(data) && (!!data.status || typeof data.value === "number" || typeof data.percent === "number");
 
   const filtered = notifications.filter((n: any) => {
-    if (filter === "all") return true;
-    if (filter === "read") return n.isRead === true;
-    if (filter === "unread") return n.isRead === false;
+    const data = parsePayload(n);
+    const isCritical = data?.status === "HIGH";
+
+    // Tab filter
+    if (filter === "read" && !n.isRead) return false;
+    if (filter === "unread" && n.isRead) return false;
+    if (filter === "critical" && !isCritical) return false;
+
+    // Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const titleMatch = (n.title || "").toLowerCase().includes(q);
+      const assetMatch = (data?.asset || "").toLowerCase().includes(q);
+      const signalMatch = (data?.signal || "").toLowerCase().includes(q);
+      const messageMatch = (data?.message || "").toLowerCase().includes(q);
+      return titleMatch || assetMatch || signalMatch || messageMatch;
+    }
+
+    return true;
   });
 
-  const cardBase =
-    "relative p-4 mb-4 bg-card border border-border rounded-xl shadow-sm hover:shadow-md transition";
+  const unreadCount = notifications.filter((n: any) => !n.isRead).length;
+  const criticalCount = notifications.filter((n: any) => {
+    const d = parsePayload(n);
+    return d?.status === "HIGH";
+  }).length;
+  const resolvedCount = notifications.filter((n: any) => {
+    const d = parsePayload(n);
+    return isResolvedLike(d);
+  }).length;
+
   useEffect(() => {
-  if (!hasMore || loading) return;
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
-        loadMore(); // 🔥 CURSOR FETCH HERE
-      }
-    },
-    {
-      root: null,
-      rootMargin: "0px",
-      threshold: 0.4,
-    }
-  );
-
-  if (loaderRef.current) {
-    observer.observe(loaderRef.current);
-  }
-
-  return () => observer.disconnect();
-}, [hasMore, loading, loadMore]);
-
-useEffect(() => {
-  setFilter(activeTab);
-}, [activeTab]);
-
+    if (!hasMore || loading) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { root: null, rootMargin: "0px", threshold: 0.4 }
+    );
+    if (loaderRef.current) observer.observe(loaderRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadMore]);
 
   return (
-    <div className="flex flex-col h-screen md:h-full bg-background">
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* ===================== CONTROL ROOM HERO METRICS ===================== */}
+      <div className="p-6 pb-4 border-b border-border bg-card/60 backdrop-blur-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+              <h1 className="text-2xl font-black tracking-tight text-foreground">
+                Mill Supervisory Notifications
+              </h1>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Live DCS process alarms, equipment drift notifications, and predictive break warnings.
+            </p>
+          </div>
 
-      {/* ===================== FILTER BAR ===================== */}
-      <div className="border-b border-border px-4 py-3 bg-card flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          {["all", "unread", "read"].map(key => (
-            <button
-              id={`notif-filter-${key}`}
-              key={key}
-              onClick={() => {
-                setFilter(key as any);
-                setActiveTab(key as any);
-              }}
-              className={`pb-2 text-sm font-medium transition border-b-2 ${
-                filter === key
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {key.charAt(0).toUpperCase() + key.slice(1)}
-            </button>
-          ))}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={markAllRead}
+                className="text-xs gap-1.5 border-border/80"
+              >
+                <CheckCheck className="w-3.5 h-3.5 text-emerald-500" />
+                Mark all as read
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* MARK ALL READ BUTTON */}
-        {filter === "unread" && filtered.length > 0 && (
-          <button
-            onClick={markAllRead}
-            className="px-3 py-1 rounded bg-primary text-white text-sm hover:bg-primary/90 transition"
-          >
-            Mark All Read
-          </button>
-        )}
+        {/* 4 Summary Metric Badges */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <div className="bg-card border border-border/80 rounded-xl p-3 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Total Logged
+            </span>
+            <span className="text-xl font-black text-foreground font-mono mt-0.5 block">
+              {notifications.length}
+            </span>
+          </div>
+
+          <div className="bg-card border border-border/80 rounded-xl p-3 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Unread Alarms
+            </span>
+            <span className="text-xl font-black text-amber-500 font-mono mt-0.5 block">
+              {unreadCount}
+            </span>
+          </div>
+
+          <div className="bg-card border border-border/80 rounded-xl p-3 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Critical Hazards
+            </span>
+            <span className="text-xl font-black text-rose-500 font-mono mt-0.5 block">
+              {criticalCount}
+            </span>
+          </div>
+
+          <div className="bg-card border border-border/80 rounded-xl p-3 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Restored Normal
+            </span>
+            <span className="text-xl font-black text-emerald-500 font-mono mt-0.5 block">
+              {resolvedCount}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* ===================== LIST ===================== */}
-      <div  id="notification-list" className="flex-1 overflow-y-auto p-4 bg-background">
-        {filtered.length === 0 && (
-          <p className="text-muted-foreground text-center py-10">No notifications found</p>
+      {/* ===================== FILTER & SEARCH BAR ===================== */}
+      <div className="px-6 py-3 border-b border-border bg-card/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          <button
+            onClick={() => setFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              filter === "all"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            All ({notifications.length})
+          </button>
+          <button
+            onClick={() => setFilter("unread")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              filter === "unread"
+                ? "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            Unread ({unreadCount})
+          </button>
+          <button
+            onClick={() => setFilter("critical")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              filter === "critical"
+                ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            Critical Hazards ({criticalCount})
+          </button>
+          <button
+            onClick={() => setFilter("read")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              filter === "read"
+                ? "bg-muted text-foreground border border-border shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            Archived
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full sm:w-72">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search asset, tag, or message..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+      </div>
+
+      {/* ===================== NOTIFICATION CARDS FEED ===================== */}
+      <div className="flex-1 p-6 space-y-4 max-w-5xl mx-auto w-full">
+        {filtered.length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded-2xl bg-card/30">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-foreground">No Matching Notifications</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mt-1">
+              There are no process notifications matching your filter criteria. Mill operations are steady.
+            </p>
+          </div>
+        ) : (
+          filtered.map((notif: any) => {
+            const data = parsePayload(notif);
+            const resolved = isResolvedLike(data);
+            const isStart = isStartLike(data);
+            const isHigh = data?.status === "HIGH";
+            const isLow = data?.status === "LOW";
+            const timeLabel = timeAgo(data?.timestamp || notif.createdAt);
+
+            /* ------------------ ACTIVE PROCESS ALARM CARD ------------------ */
+            if (isStart) {
+              const percent = typeof data?.percent === "number" ? data.percent : 24;
+              const absDev = Math.abs(percent);
+
+              return (
+                <div
+                  key={notif.id}
+                  className={`relative rounded-2xl border p-5 transition-all shadow-sm ${
+                    !notif.isRead
+                      ? isHigh
+                        ? "bg-gradient-to-r from-rose-950/20 via-card to-card border-rose-500/50 shadow-rose-950/10"
+                        : "bg-gradient-to-r from-amber-950/20 via-card to-card border-amber-500/40 shadow-amber-950/10"
+                      : "bg-card border-border/80 hover:border-border"
+                  }`}
+                >
+                  {/* Left severity indicator bar */}
+                  <div
+                    className={`absolute left-0 top-4 bottom-4 w-1.5 rounded-r ${
+                      isHigh ? "bg-rose-500" : isLow ? "bg-amber-500" : "bg-cyan-500"
+                    }`}
+                  />
+
+                  <div className="pl-2">
+                    {/* Header Row: Badges & Timestamp */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-black uppercase font-mono tracking-wider ${
+                            isHigh
+                              ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                              : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          }`}
+                        >
+                          {data.status || "ALERT"}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-foreground">
+                          {data.asset || "PM-01-PAPER-MACHINE"}
+                        </span>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          {data.signal || "Operational Variable"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1 font-mono">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{timeLabel}</span>
+                        </div>
+                        {!notif.isRead && (
+                          <button
+                            onClick={() => markRead(notif.recipientId || notif.id)}
+                            className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Alert Message */}
+                    {data.message && (
+                      <p className="text-xs text-foreground/90 mt-2 font-medium">
+                        {data.message}
+                      </p>
+                    )}
+
+                    {/* Operational Details Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 bg-muted/30 p-3 rounded-xl border border-border/40">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          Current Value
+                        </span>
+                        <span className="text-sm font-mono font-bold text-foreground mt-0.5 block">
+                          {fmt(data.value)} {data.unit || ""}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          Deviation
+                        </span>
+                        <span
+                          className={`text-sm font-mono font-bold mt-0.5 block ${
+                            isHigh ? "text-rose-400" : "text-amber-400"
+                          }`}
+                        >
+                          {percent > 0 ? `+${fmt(percent)}%` : `${fmt(percent)}%`}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          Safe Minimum
+                        </span>
+                        <span className="text-sm font-mono font-medium text-muted-foreground mt-0.5 block">
+                          {fmt(data.min)} {data.unit || ""}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          Safe Maximum
+                        </span>
+                        <span className="text-sm font-mono font-medium text-muted-foreground mt-0.5 block">
+                          {fmt(data.max)} {data.unit || ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-3">
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isHigh ? "bg-rose-500" : "bg-amber-500"
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(20, absDev))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom Action Bar */}
+                    <div className="mt-4 pt-3 border-t border-border/50 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-rose-400" />
+                        <span>Break hazard risk elevated. Advance lead time available.</span>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          setSelectedAlertForRca({
+                            assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
+                            signalName: data.signal || "Operational Variable",
+                            severity: isHigh ? "Critical" : "Medium",
+                            observedValue: data.value,
+                            thresholdValue: isHigh ? data.max : data.min,
+                            unit: data.unit || "%",
+                            deviationPercent: data.percent ?? 24,
+                            timestamp: data.timestamp || notif.createdAt,
+                          })
+                        }
+                        className="text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Investigate with AI RCA
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            /* ------------------ RESOLVED / NORMALIZED CARD ------------------ */
+            if (resolved) {
+              return (
+                <div
+                  key={notif.id}
+                  className="relative rounded-2xl border border-emerald-500/30 bg-card p-5 transition-all shadow-sm"
+                >
+                  <div className="absolute left-0 top-4 bottom-4 w-1.5 rounded-r bg-emerald-500" />
+
+                  <div className="pl-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Resolved
+                        </span>
+                        <span className="text-xs font-mono font-bold text-foreground">
+                          {data?.asset || "PM-01-PAPER-MACHINE"}
+                        </span>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          {data?.signal || "Process Variable"} Restored
+                        </span>
+                      </div>
+
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {timeLabel}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Operating telemetry returned to baseline tolerance. Break risk subdued.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            /* ------------------ GENERIC / SYSTEM CARD ------------------ */
+            return (
+              <div
+                key={notif.id}
+                className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-foreground">{notif.title || "Notification"}</span>
+                  <span className="text-xs text-muted-foreground">{timeLabel}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{notif.text}</p>
+              </div>
+            );
+          })
         )}
 
-        {filtered.map((notif: any) => {
-          const data = parsePayload(notif);
-          const resolved = isResolvedLike(data) && !isStartLike(data);
-          const start = isStartLike(data);
-
-          /* ===================== UNREAD CARD BUTTON ===================== */
-        const ReadBtn =
-        !notif.isRead && filter === "unread" ? (
-            <button
-            onClick={() => markRead(notif.recipientId)}   // ✅ Correct ID
-            className="ml-auto flex items-center p-1 rounded hover:bg-primary/20 text-primary transition"
-            title="Mark as Read"
-            >
-            <Eye className="h-4 w-4" />
-            </button>
-        ) : null;
-
-          /* ===================== PLAINTEXT NOTIFICATION ===================== */
-          if (!data) {
-            return (
-              <div key={notif.id} className={cardBase}>
-            <div className="flex justify-between items-start">
-
-                {/* LEFT SIDE CONTENT */}
-                <div className="flex items-start gap-3">
-                <Bell className="h-5 w-5 text-muted-foreground mt-1" />
-                <div>
-                    <p className="font-medium text-foreground">{notif.title ?? "Notification"}</p>
-                    <p className="text-sm text-foreground/80">{notif.text}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{fmtDate(notif.createdAt)}</p>
-                </div>
-                </div>
-
-                {/* RIGHT SIDE READ BUTTON */}
-                {ReadBtn}
-
-            </div>
-            </div>
-            );
-          }
-
-          /* ===================== RESOLVED NOTIFICATION ===================== */
-          if (resolved) {
-            const durationSeconds =
-              data.durationSeconds ??
-              Math.max(0, (new Date(data.to).getTime() - new Date(data.from).getTime()) / 1000);
-
-            return (
-              <div key={notif.id} className={cardBase}>
-                {ReadBtn}
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 rounded-l-xl" />
-
-                <div className="text-xs text-right text-muted-foreground">{fmtDate(data.to)}</div>
-
-                <p className="font-semibold text-sm text-foreground">
-                  {data.signal} is back to normal
-                </p>
-
-                <div className="mt-2 text-sm flex justify-between text-foreground/90">
-                  <div>Asset: <b>{data.asset}</b></div>
-                  <div>Signal: <b>{data.signal}</b></div>
-                </div>
-
-                {/* DETAILS */}
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs bg-muted/10 p-3 rounded-lg border border-border">
-                  <div>From: <b>{fmtDate(data.from)}</b></div>
-                  <div>To: <b>{fmtDate(data.to)}</b></div>
-                  <div className="col-span-2">Duration: <b>{Math.round(durationSeconds)} sec</b></div>
-                  <div>Min: <b>{fmt(data.min)}</b></div>
-                  <div>Max: <b>{fmt(data.max)}</b></div>
-                </div>
-
-                <div className="mt-2 h-1 bg-green-500 rounded-full" />
-              </div>
-            );
-          }
-
-          /* ===================== START / HIGH / LOW ===================== */
-          if (start) {
-            const isHigh = data.status === "HIGH";
-            const isLow = data.status === "LOW";
-
-            return (
-              <div key={notif.id} className={cardBase}>
-                {ReadBtn}
-                <div
-                  className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
-                    isHigh ? "bg-red-500" : isLow ? "bg-blue-500" : "bg-gray-400"
-                  }`}
-                />
-
-                <div className="text-xs text-right text-muted-foreground">{fmtDate(data.timestamp)}</div>
-
-                <div className="font-semibold text-sm text-foreground">
-                  {data.asset} • {data.signal}
-                </div>
-
-                <div className="mt-2 flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      isHigh ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"
-                    }`}
-                  >
-                    {data.status}
-                  </span>
-
-                  <span className="text-sm text-foreground">
-                    {fmt(data.value)} {data.unit}
-                  </span>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-3 text-xs bg-muted/10 p-3 rounded-lg border border-border">
-                  <div>Min: <b>{fmt(data.min)}</b></div>
-                  <div>Max: <b>{fmt(data.max)}</b></div>
-                </div>
-
-                <div className="mt-3 pt-2 border-t border-border flex items-center justify-end">
-                  <Button
-                    size="sm"
-                    className="text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
-                    onClick={() =>
-                      setSelectedAlertForRca({
-                        assetName: data.asset || notif.title || "Asset",
-                        signalName: data.signal || "Operational Variable",
-                        severity: data.status === "HIGH" ? "Critical" : "Medium",
-                        observedValue: data.value,
-                        thresholdValue: data.status === "HIGH" ? data.max : data.min,
-                        unit: data.unit,
-                        deviationPercent: data.percent ?? 24,
-                        timestamp: data.timestamp || notif.createdAt,
-                      })
-                    }
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Investigate with AI RCA
-                  </Button>
-                </div>
-              </div>
-            );
-          }
-
-          /* ===================== FALLBACK JSON ===================== */
-          return (
-            <div key={notif.id} className={cardBase}>
-              {ReadBtn}
-              <p className="font-semibold text-foreground">{notif.title}</p>
-              <pre className="text-xs mt-2 bg-muted/10 p-2 rounded border border-border text-foreground">
-                {JSON.stringify(data, null, 2)}
-              </pre>
-            </div>
-          );
-        })}
         {hasMore && (
-        <div
-          ref={loaderRef}
-          className="h-10 flex items-center justify-center text-xs text-muted-foreground"
-        >
-          {loading ? "Loading more..." : "Scroll for more"}
-        </div>
-      )}
+          <div
+            ref={loaderRef}
+            className="h-10 flex items-center justify-center text-xs text-muted-foreground"
+          >
+            {loading ? "Loading more notifications..." : "Scroll for more"}
+          </div>
+        )}
       </div>
 
       {/* AI Root Cause Analysis (RCA) Modal Dialog */}
