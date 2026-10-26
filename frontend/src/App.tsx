@@ -76,11 +76,11 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/assets" element={<Assets />} />
               <Route path="/devices" element={<Devices />} />
-              <Route path="/devices/add" element={<AddDeviceForm />} />
+              <Route path="/devices/add" element={<Navigate to="/devices?action=add" replace />} />
               <Route path="/devices/edit/:deviceId" element={<EditDeviceForm />} />
               <Route path="/devices/config/:deviceId" element={<ConfigureDeviceForm />} />
               <Route path="/devices/ports/:id" element={<AddPortForm />} />
-              <Route path="/devices/upload" element={<UploadCsvModal />} />
+              <Route path="/devices/upload" element={<Navigate to="/devices?action=upload" replace />} />
               <Route path="/signal" element={<Signal />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/reports" element={<Reports />} />
@@ -90,7 +90,8 @@ export default function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/ai" element={<AiRcaChat />} />
               <Route path="/map-device-to-asset/:assetid" element={<Map_Device_To_Asset />} />
-              <Route path="Asset/BulkUpload" element={<AssetBulkUpload/>} />
+              <Route path="Asset/BulkUpload" element={<Navigate to="/assets?action=upload" replace />} />
+              <Route path="/assets/upload" element={<Navigate to="/assets?action=upload" replace />} />
               <Route path="Asset/Alerts/:assetId" element={<AlertsPage/>} />
               <Route path="/forbidden" element={<ForbiddenRedirect />} />
               <Route path="/gateways" element={<Gateways />} />

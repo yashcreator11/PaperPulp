@@ -16,7 +16,7 @@ import {
   Server,
   Filter,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { getDevices, deleteDevice } from "@/api/deviceApi";
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import DeviceModal from "@/devices/DeviceModal";
+import DeviceBulkUploadModal from "@/devices/DeviceBulkUploadModal";
 
 interface Device {
   deviceId: string;
@@ -73,10 +74,13 @@ export default function Devices() {
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
 
-  // Edit / Config Modal popup state
+  // Edit / Config / Add Modal popup state
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"edit" | "config">("edit");
+  const [modalMode, setModalMode] = useState<"add" | "edit" | "config">("edit");
   const [targetDevice, setTargetDevice] = useState<Device | null>(null);
+
+  // Bulk Import modal state
+  const [openBulkUpload, setOpenBulkUpload] = useState(false);
 
   // Pagination
   const [pageNumber, setPageNumber] = useState(1);
@@ -84,8 +88,21 @@ export default function Devices() {
   const [totalPages, setTotalPages] = useState(1);
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin" || user?.role === "SuperAdmin";
+
+  // Check URL query action to open popup modals directly (e.g. /devices?action=add or /devices?action=upload)
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action === "add") {
+      setTargetDevice(null);
+      setModalMode("add");
+      setModalOpen(true);
+    } else if (action === "upload") {
+      setOpenBulkUpload(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -127,6 +144,12 @@ export default function Devices() {
       setOpenDeleteDialog(false);
       setSelectedDevice(null);
     }
+  };
+
+  const handleOpenAdd = () => {
+    setTargetDevice(null);
+    setModalMode("add");
+    setModalOpen(true);
   };
 
   const handleOpenEdit = (device: Device) => {
@@ -180,7 +203,7 @@ export default function Devices() {
         <div className="flex items-center gap-2.5">
           <Button
             id="add-device-btn"
-            onClick={() => navigate("/devices/add")}
+            onClick={handleOpenAdd}
             className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-sm"
           >
             + Add New Device
@@ -189,7 +212,7 @@ export default function Devices() {
           {isAdmin && (
             <Button
               id="import-bulk-btn"
-              onClick={() => navigate("/devices/upload")}
+              onClick={() => setOpenBulkUpload(true)}
               variant="outline"
               className="text-xs font-semibold"
             >
@@ -536,13 +559,30 @@ export default function Devices() {
         </Pagination>
       )}
 
-      {/* ── DEVICE EDIT / CONFIG MODAL POPUP ── */}
+      {/* ── DEVICE EDIT / CONFIG / ADD MODAL POPUP ── */}
       <DeviceModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          if (searchParams.get("action")) {
+            setSearchParams({}, { replace: true });
+          }
+        }}
         mode={modalMode}
         device={targetDevice}
         onDeviceUpdated={fetchDevices}
+      />
+
+      {/* ── DEVICE BULK IMPORT CSV MODAL POPUP ── */}
+      <DeviceBulkUploadModal
+        isOpen={openBulkUpload}
+        onClose={() => {
+          setOpenBulkUpload(false);
+          if (searchParams.get("action")) {
+            setSearchParams({}, { replace: true });
+          }
+        }}
+        onImportSuccess={fetchDevices}
       />
 
       {/* ── DELETE CONFIRMATION DIALOG ── */}

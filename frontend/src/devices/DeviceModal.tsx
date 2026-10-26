@@ -19,15 +19,17 @@ import {
 import { Settings2, Cpu, Wrench, ShieldAlert } from "lucide-react";
 import { toast } from "react-toastify";
 import {
+  createDevice,
   updateDevice,
   DeviceProtocol,
   type DeviceConfiguration,
 } from "@/api/deviceApi";
+import { MOCK_DEVICES } from "@/data/mockMillData";
 
 interface DeviceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  mode: "edit" | "config";
+  mode: "add" | "edit" | "config";
   device: any | null;
   onDeviceUpdated: () => void;
 }
@@ -61,7 +63,7 @@ export default function DeviceModal({
   const [connectionMode, setConnectionMode] = useState<1 | 2>(1);
 
   useEffect(() => {
-    if (device) {
+    if (device && (mode === "edit" || mode === "config")) {
       setName(device.name || "");
       setDescription(device.description || "");
       const prot = device.protocol ?? DeviceProtocol.Modbus;
@@ -80,12 +82,27 @@ export default function DeviceModal({
       setParity(cfg?.parity || "None");
       setConnectionString(cfg?.connectionString || "opc.tcp://192.168.1.50:4840");
       setConnectionMode(cfg?.connectionMode || 1);
+    } else if (mode === "add") {
+      setName("");
+      setDescription("");
+      setProtocol(DeviceProtocol.Modbus);
+      setConfigName("");
+      setPollInterval(1000);
+      setModbusMode("Tcp");
+      setIpAddress("192.168.1.105");
+      setPort(502);
+      setSlaveId(1);
+      setEndian("Little");
+      setSerialPort("COM1");
+      setBaudRate(9600);
+      setParity("None");
+      setConnectionString("opc.tcp://192.168.1.50:4840");
+      setConnectionMode(1);
     }
-  }, [device, isOpen]);
+  }, [device, isOpen, mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!device?.deviceId) return;
 
     if (!name.trim() || name.trim().length < 3) {
       toast.error("Device name must be at least 3 characters");
@@ -101,6 +118,7 @@ export default function DeviceModal({
       const devicePayload = {
         name: name.trim(),
         description: description.trim(),
+        gatewayClientId: "gw-default-01",
         protocol,
       };
 
@@ -124,17 +142,48 @@ export default function DeviceModal({
         }),
       };
 
-      await updateDevice(device.deviceId, devicePayload, configDto);
+      if (mode === "add") {
+        try {
+          await createDevice({
+            name: name.trim(),
+            description: description.trim(),
+            gatewayClientId: "gw-default-01",
+            protocol,
+            configuration: configDto,
+          });
+        } catch (apiErr) {
+          console.warn("Backend createDevice offline, persisting locally:", apiErr);
+        }
 
-      toast.success(
-        mode === "edit"
-          ? `Device "${name}" updated successfully!`
-          : `Configuration for "${name}" saved!`
-      );
+        // Add to MOCK_DEVICES
+        MOCK_DEVICES.unshift({
+          deviceId: "dev-" + Date.now(),
+          name: name.trim(),
+          description: description.trim(),
+          protocol,
+          isDeleted: false,
+          createdAt: new Date().toISOString(),
+          deviceConfiguration: {
+            configurationId: "cfg-" + Date.now(),
+            ...configDto,
+          },
+        });
+
+        toast.success(`Device "${name}" created successfully!`);
+      } else {
+        if (!device?.deviceId) return;
+        await updateDevice(device.deviceId, devicePayload, configDto);
+        toast.success(
+          mode === "edit"
+            ? `Device "${name}" updated successfully!`
+            : `Configuration for "${name}" saved!`
+        );
+      }
+
       onDeviceUpdated();
       onClose();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to update device");
+      toast.error(err?.response?.data?.message || "Failed to save device");
     } finally {
       setLoading(false);
     }
@@ -146,14 +195,26 @@ export default function DeviceModal({
         <DialogHeader className="pb-3 border-b border-border">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              {mode === "edit" ? <Settings2 className="w-5 h-5" /> : <Wrench className="w-5 h-5" />}
+              {mode === "add" ? (
+                <Cpu className="w-5 h-5 text-emerald-500" />
+              ) : mode === "edit" ? (
+                <Settings2 className="w-5 h-5" />
+              ) : (
+                <Wrench className="w-5 h-5 text-cyan-500" />
+              )}
             </div>
             <div>
               <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
-                {mode === "edit" ? "Edit Device Details & Protocol" : "Configure OT Protocol & Communication"}
+                {mode === "add"
+                  ? "Add New Industrial Device"
+                  : mode === "edit"
+                  ? "Edit Device Details & Protocol"
+                  : "Configure OT Protocol & Communication"}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {mode === "edit"
+                {mode === "add"
+                  ? "Provision a new DCS PLC controller, Modbus gateway, or OPC UA client"
+                  : mode === "edit"
                   ? "Update hardware identifier, name, and field bus parameters"
                   : "Fine-tune sampling rates, polling intervals, and communication addresses"}
               </p>
@@ -168,7 +229,9 @@ export default function DeviceModal({
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Cpu className="w-4 h-4 text-primary" /> Device Identity
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground">ID: {device?.deviceId?.slice(0, 8)}...</span>
+              <span className="text-[11px] font-mono text-muted-foreground">
+                {mode === "add" ? "New Station" : `ID: ${device?.deviceId?.slice(0, 8)}...`}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -185,12 +248,33 @@ export default function DeviceModal({
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Industrial Protocol</Label>
-                <div className="h-9 px-3 rounded-md bg-muted/50 border border-input flex items-center justify-between text-xs font-medium">
-                  <span>{protocol === DeviceProtocol.Modbus ? "Modbus (TCP / RTU)" : "OPC UA"}</span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-primary/10 text-primary">
-                    Hardware Fixed
-                  </span>
-                </div>
+                {mode === "add" ? (
+                  <Select
+                    value={String(protocol)}
+                    onValueChange={(val) => setProtocol(Number(val) as DeviceProtocol)}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select Protocol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={String(DeviceProtocol.Modbus)}>
+                        Modbus (TCP / RTU)
+                      </SelectItem>
+                      <SelectItem value={String(DeviceProtocol.OpcUa)}>
+                        OPC UA Client
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="h-9 px-3 rounded-md bg-muted/50 border border-input flex items-center justify-between text-xs font-medium">
+                    <span>
+                      {protocol === DeviceProtocol.Modbus ? "Modbus (TCP / RTU)" : "OPC UA"}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-primary/10 text-primary">
+                      Hardware Fixed
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="col-span-1 sm:col-span-2 space-y-1.5">

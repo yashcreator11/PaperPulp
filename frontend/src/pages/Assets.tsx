@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,14 +20,7 @@ import { toast } from "react-toastify";
 import AssetHierarchyPage, { type BackendAsset } from "@/asset/AssetTree";
 import { getAssetHierarchy } from "@/api/assetApi";
 import { useAuth } from "@/context/AuthContext";
-import UploadAssetCsv from "@/asset/UploadAssetCsv";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import AssetBulkUploadModal from "@/asset/AssetBulkUploadModal";
 
 // ── Helpers (kept identical to original) ─────────────────────────────────────
 
@@ -50,8 +43,16 @@ export default function Assets() {
   const [showUploadModal, setShowUploadModal] = useState(false);
 
   const navigate  = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user }  = useAuth();
-  const isAdmin   = user?.role === "Admin";
+  const isAdmin   = user?.role === "Admin" || user?.role === "SuperAdmin";
+
+  // Auto-open modal if navigated with ?action=upload
+  useEffect(() => {
+    if (searchParams.get("action") === "upload") {
+      setShowUploadModal(true);
+    }
+  }, [searchParams]);
 
   // ── Load assets ─────────────────────────────────────────────────────────────
   const loadAssets = async () => {
@@ -82,16 +83,6 @@ export default function Assets() {
 
   return (
     <>
-      {/*
-        AssetHierarchyPage is fully self-contained:
-          • left panel  → asset tree with search + CRUD
-          • center panel → asset detail (type / level / status / signals / alerts)
-          • right panel  → available devices + inline mapping modal
-
-        It owns its own top bar (breadcrumb + Refresh + Add Root).
-        We inject the extra admin buttons (AI bot + Import Bulk) via the
-        `headerExtra` slot so they appear alongside the built-in controls.
-      */}
       <AssetHierarchyPage
         assets={assets}
         onAdd={loadAssets}
@@ -110,8 +101,8 @@ export default function Assets() {
               <Button
                 id="import-bulk-btn"
                 size="sm"
-                className="h-7 text-xs"
-                onClick={() => navigate("/Asset/BulkUpload")}
+                className="h-7 text-xs font-semibold"
+                onClick={() => setShowUploadModal(true)}
               >
                 Import Bulk
               </Button>
@@ -120,22 +111,17 @@ export default function Assets() {
         }
       />
 
-      {/* Upload CSV modal (kept from original) */}
-      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-        <DialogContent className="sm:max-w-md p-6 bg-card rounded-2xl border shadow-xl">
-          <DialogHeader>
-            <DialogTitle>Upload CSV</DialogTitle>
-            <DialogDescription>Upload asset hierarchy file</DialogDescription>
-          </DialogHeader>
-          <UploadAssetCsv
-            onClose={() => setShowUploadModal(false)}
-            onSuccess={() => {
-              void loadAssets();
-              setShowUploadModal(false);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* Modern Asset Bulk Upload CSV / Excel Modal Popup */}
+      <AssetBulkUploadModal
+        isOpen={showUploadModal}
+        onClose={() => {
+          setShowUploadModal(false);
+          if (searchParams.get("action")) {
+            setSearchParams({}, { replace: true });
+          }
+        }}
+        onSuccess={() => void loadAssets()}
+      />
     </>
   );
 }
