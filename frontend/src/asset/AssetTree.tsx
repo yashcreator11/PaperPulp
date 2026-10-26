@@ -63,6 +63,7 @@ import Addroot from "../AssetsHierarchy/Addroot";
 import Addasset from "../AssetsHierarchy/Addasset";
 import Editasset from "../AssetsHierarchy/Editasset";
 import DeleteAsset from "@/AssetsHierarchy/DeleteAsset";
+import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 import { useAuth } from "@/context/AuthContext";
 import levelToType from "./mapBackendAsset";
 import apiAsset from "@/api/axiosAsset";
@@ -583,15 +584,17 @@ export default function AssetHierarchyPage({
   const [treeWidth, setTreeWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem("asset_tree_width");
-      return saved ? Math.max(250, Math.min(Number(saved), 750)) : 340;
+      return saved ? Math.max(240, Math.min(Number(saved), 480)) : 300;
     } catch {
-      return 340;
+      return 300;
     }
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(true);
+  const [selectedRcaAlert, setSelectedRcaAlert] = useState<AlertRcaData | null>(null);
 
   const handleWidthChange = useCallback((w: number) => {
-    const clamped = Math.max(250, Math.min(w, 750));
+    const clamped = Math.max(220, Math.min(w, 480));
     setTreeWidth(clamped);
     try {
       localStorage.setItem("asset_tree_width", String(clamped));
@@ -599,10 +602,10 @@ export default function AssetHierarchyPage({
   }, []);
 
   const toggleExpandTree = useCallback(() => {
-    if (treeWidth > 380) {
+    if (treeWidth > 350) {
       handleWidthChange(280);
     } else {
-      handleWidthChange(520);
+      handleWidthChange(400);
     }
   }, [treeWidth, handleWidthChange]);
 
@@ -614,7 +617,7 @@ export default function AssetHierarchyPage({
   useEffect(() => {
     if (!isResizing) return;
     const onMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(250, Math.min(e.clientX - 80, 750));
+      const newWidth = Math.max(220, Math.min(e.clientX - 60, 480));
       setTreeWidth(newWidth);
     };
     const onMouseUp = () => {
@@ -1088,12 +1091,27 @@ export default function AssetHierarchyPage({
               <Plus className="h-3.5 w-3.5" /> Add Root
             </Button>
           )}
+
+          {/* Toggle Device Mapping Panel button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5 border-border/80 hover:bg-muted/60"
+            onClick={() => setShowRightPanel((prev) => !prev)}
+            title="Toggle Right Available Devices Panel"
+          >
+            <Link2 className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden sm:inline">
+              {showRightPanel ? "Hide Device Panel" : "Show Device Panel"}
+            </span>
+          </Button>
+
           {headerExtra}
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-w-0">
         {/* LEFT: Asset Tree (Expandable / Resizable) */}
         <aside
           style={{ width: `${treeWidth}px` }}
@@ -1168,7 +1186,7 @@ export default function AssetHierarchyPage({
         </aside>
 
         {/* CENTER: Asset Detail */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {!selectedAsset ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
               <Factory className="h-12 w-12 opacity-20" />
@@ -1180,28 +1198,28 @@ export default function AssetHierarchyPage({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className="p-6 space-y-5"
+              className="p-5 md:p-6 space-y-5 max-w-full"
             >
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold tracking-tight">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate max-w-md">
                   {selectedAsset.name}
                 </h1>
                 {!selectedAsset.isDeleted && (
                   <Badge
                     variant="outline"
-                    className="text-emerald-500 border-emerald-500/30 gap-1.5 text-xs"
+                    className="text-emerald-500 border-emerald-500/30 gap-1.5 text-xs shrink-0"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{" "}
                     Live
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground shrink-0">
                   Sub Assets:{" "}
                   <strong>{selectedAsset.childrens?.length ?? 0}</strong>
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(
                   [
                     {
@@ -1226,13 +1244,13 @@ export default function AssetHierarchyPage({
                 ).map((card) => (
                   <div
                     key={card.label}
-                    className="rounded-xl border border-border/60 bg-card p-4"
+                    className="rounded-xl border border-border/60 bg-card p-3.5 shadow-sm min-w-0"
                   >
-                    <div className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase mb-2">
+                    <div className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase mb-1 truncate">
                       {card.label}
                     </div>
                     <div
-                      className={`text-xl font-bold ${card.green ? "text-emerald-500" : card.accent ? "text-primary" : "text-foreground"}`}
+                      className={`text-lg md:text-xl font-bold truncate ${card.green ? "text-emerald-500" : card.accent ? "text-primary" : "text-foreground"}`}
                     >
                       {card.value}
                     </div>
@@ -1245,8 +1263,8 @@ export default function AssetHierarchyPage({
                   <Spinner />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="space-y-5">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+                  <div className="space-y-5 min-w-0">
                     {deviceDetails.length > 0 && (
                       <div className="rounded-xl border-2 border-emerald-400 dark:border-emerald-600 bg-gradient-to-br from-emerald-100 to-green-50 dark:from-emerald-900/60 dark:to-green-950/60 p-4 shadow-sm shadow-emerald-100 dark:shadow-emerald-900/30">
                         <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -1391,16 +1409,23 @@ export default function AssetHierarchyPage({
                         </div>
                       )}
                       {alerts.length > 0 && (
-                        <div className="p-3 border-t border-red-200 dark:border-red-800">
+                        <div className="p-3 border-t border-red-200 dark:border-red-800 space-y-2">
                           <Button
-                            className="w-full gap-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:brightness-110 text-white font-semibold text-sm"
-                            onClick={() =>
-                              analyseAlert(alerts[0].alertStartUtc)
-                            }
-                            disabled={aiLoading}
+                            className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs h-8 shadow-sm"
+                            onClick={() => {
+                              setSelectedRcaAlert({
+                                assetName: selectedAsset?.name || "Asset",
+                                signalName: alerts[0]?.signalName || "Operating Anomaly",
+                                severity: "Critical",
+                                observedValue: alerts[0]?.maxObservedValue ?? alerts[0]?.minObservedValue,
+                                thresholdValue: alerts[0]?.maxThreshold ?? alerts[0]?.minThreshold,
+                                deviationPercent: 24.8,
+                                timestamp: alerts[0]?.alertStartUtc,
+                              });
+                            }}
                           >
-                            <Sparkles className="h-4 w-4" />
-                            {aiLoading ? "Analysing…" : "Analyze Alert"}
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Investigate with AI RCA
                           </Button>
                         </div>
                       )}
@@ -1426,22 +1451,34 @@ export default function AssetHierarchyPage({
           )}
         </main>
 
-        {/* RIGHT: Available Devices — Map button fires immediately, NO modal */}
-        <aside className="w-72 shrink-0 flex flex-col border-l border-border/60 bg-background overflow-hidden">
-          <div className="p-3 border-b border-border/60">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                Available Devices
-              </span>
-              {devicesForRender.length > 0 && (
-                <Badge
-                  variant="outline"
-                  className="text-emerald-500 border-emerald-500/30 text-xs"
-                >
-                  {devicesForRender.length} available
-                </Badge>
-              )}
-            </div>
+        {/* RIGHT: Available Devices — Collapsible Panel */}
+        {showRightPanel && (
+          <aside className="w-80 shrink-0 flex flex-col border-l border-border/60 bg-background overflow-hidden transition-all duration-200">
+            <div className="p-3 border-b border-border/60">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                  Available Devices
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {devicesForRender.length > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-emerald-500 border-emerald-500/30 text-xs"
+                    >
+                      {devicesForRender.length} available
+                    </Badge>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowRightPanel(false)}
+                    title="Collapse Devices Panel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
             <div className="flex gap-1">
               {(["All"] as const).map((f) => (
                 <button
@@ -1598,7 +1635,15 @@ export default function AssetHierarchyPage({
               ))}
           </div>
         </aside>
+      )}
       </div>
+
+      {/* AI Root Cause Analysis (RCA) Modal */}
+      <RcaModal
+        isOpen={!!selectedRcaAlert}
+        onClose={() => setSelectedRcaAlert(null)}
+        alert={selectedRcaAlert}
+      />
 
       {/* Tree modals */}
       {showAddRootModal && (
