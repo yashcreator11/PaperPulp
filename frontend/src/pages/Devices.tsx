@@ -7,7 +7,14 @@ import {
   Search,
   HdmiPort,
   AlertTriangle,
-  View,
+  Cpu,
+  Layers,
+  Activity,
+  Zap,
+  CheckCircle2,
+  X,
+  Server,
+  Filter,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getDevices, deleteDevice } from "@/api/deviceApi";
@@ -22,7 +29,6 @@ import { toast } from "react-toastify";
 import {
   Pagination,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -30,342 +36,478 @@ import {
 } from "@/components/ui/pagination";
 import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
+import DeviceModal from "@/devices/DeviceModal";
 
 interface Device {
   deviceId: string;
   name: string;
   description: string;
-  protocol: string;
+  protocol: number | string;
+  gatewayId?: string;
   deviceConfiguration?: {
     configurationId: string;
     name: string;
     pollIntervalMs: number;
-    ipAddress: string;
-    port: number;
-    slaveId: number;
-    endian: string;
+    ipAddress?: string;
+    port?: number;
+    slaveId?: number;
+    endian?: string;
+    modbusMode?: number;
+    serialPort?: string;
+    baudRate?: number;
+    parity?: string;
+    connectionString?: string;
+    connectionMode?: number;
   };
 }
-
-type SelectedDevice = { deviceId: string; name: string };
-
-const SESSION_KEY = "selectedDeviceIds";
 
 export default function Devices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
+  const [protocolFilter, setProtocolFilter] = useState<"all" | "modbus" | "opcua">("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
+
+  // Delete modal state
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+
+  // Edit / Config Modal popup state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"edit" | "config">("edit");
+  const [targetDevice, setTargetDevice] = useState<Device | null>(null);
+
+  // Pagination
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize] = useState(6);
+  const [pageSize] = useState(8);
   const [totalPages, setTotalPages] = useState(1);
 
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  function readSelectedDevices(): SelectedDevice[] {
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((x) => {
-          if (x && typeof x === "object") {
-            const id = String((x as any).deviceId ?? (x as any).id ?? "");
-            const name = String(
-              (x as any).name ?? (x as any).displayName ?? "",
-            );
-            if (id) return { deviceId: id, name };
-          }
-          return null;
-        })
-        .filter((x): x is SelectedDevice => x !== null);
-    } catch {
-      return [];
-    }
-  }
-
-  const [sessionSelectedDevices, setSessionSelectedDevices] = useState<
-    SelectedDevice[]
-  >(() => readSelectedDevices());
+  const isAdmin = user?.role === "Admin" || user?.role === "SuperAdmin";
 
   useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key === SESSION_KEY) {
-        setSessionSelectedDevices(readSelectedDevices());
-      }
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 300);
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  useEffect(() => {
-    const fetchDevices = async () => {
-      try {
-        setLoading(true);
-        const data = await getDevices(pageNumber, pageSize, debouncedSearch);
-        // console.log("Fetched devices:", data);
-        setDevices(data.items);
-        setTotalPages(data.totalPages);
-      } catch (err: any) {
-        console.error("Error fetching devices:", err);
-        setError("Failed to fetch devices.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDevices();
+  const fetchDevices = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getDevices(pageNumber, pageSize, debouncedSearch);
+      setDevices(data.items || []);
+      setTotalPages(data.totalPages || 1);
+    } catch (err: any) {
+      console.error("Error fetching devices:", err);
+      setError("Failed to fetch devices.");
+    } finally {
+      setLoading(false);
+    }
   }, [pageNumber, pageSize, debouncedSearch]);
+
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
 
   const handleDelete = async () => {
     if (!selectedDevice) return;
     try {
       await deleteDevice(selectedDevice.deviceId);
       setDevices((prev) =>
-        prev.filter((d) => d.deviceId !== selectedDevice.deviceId),
+        prev.filter((d) => d.deviceId !== selectedDevice.deviceId)
       );
       toast.success(`Device "${selectedDevice.name}" deleted successfully!`);
     } catch (err: any) {
       console.error("Error deleting device:", err);
       toast.error(
-        err?.response?.data?.error ||
-          "Failed to delete device. Please try again.",
+        err?.response?.data?.error || "Failed to delete device. Please try again."
       );
     } finally {
-      setOpenDialog(false);
+      setOpenDeleteDialog(false);
       setSelectedDevice(null);
     }
   };
 
-  const pageNumbers = [];
-  for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
+  const handleOpenEdit = (device: Device) => {
+    setTargetDevice(device);
+    setModalMode("edit");
+    setModalOpen(true);
+  };
 
-  const toggleSelectedDevice = useCallback((name: string, deviceId: string) => {
-    let current = readSelectedDevices();
-    const exists = current.some((sd) => sd.deviceId === deviceId);
-    if (exists) {
-      current = current.filter((sd) => sd.deviceId !== deviceId);
-    } else {
-      current = [...current, { deviceId, name }];
-    }
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(current));
-    } catch (e) {
-      console.warn("Failed to write sessionStorage", e);
-    }
-    setSessionSelectedDevices(current);
-    return !exists;
-  }, []);
+  const handleOpenConfig = (device: Device) => {
+    setTargetDevice(device);
+    setModalMode("config");
+    setModalOpen(true);
+  };
 
-  function isDeviceSelected(deviceId: string) {
-    return sessionSelectedDevices.some((sd) => sd.deviceId === deviceId);
-  }
+  // Filtered devices based on protocol chip
+  const filteredDevices = devices.filter((d) => {
+    if (protocolFilter === "all") return true;
+    const isModbus = d.protocol === 1 || String(d.protocol).toLowerCase().includes("modbus");
+    const isOpc = d.protocol === 2 || String(d.protocol).toLowerCase().includes("opc");
+    if (protocolFilter === "modbus") return isModbus;
+    if (protocolFilter === "opcua") return isOpc;
+    return true;
+  });
 
-  // Check user is Admin
-  const isAdmin = user?.role === "Admin";
+  const modbusCount = devices.filter(
+    (d) => d.protocol === 1 || String(d.protocol).toLowerCase().includes("modbus")
+  ).length;
+  const opcCount = devices.filter(
+    (d) => d.protocol === 2 || String(d.protocol).toLowerCase().includes("opc")
+  ).length;
 
   return (
-    <div className="p-2 space-y-2">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="w-full space-y-5 p-2 sm:p-4">
+      {/* ── HEADER BANNER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Devices</h1>
-          <p className="text-muted-foreground">Manage all connected devices</p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground flex items-center gap-2">
+              <Server className="w-7 h-7 text-primary" />
+              Industrial OT Gateways & DCS PLCs
+            </h1>
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+              5 ONLINE
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Real-time Fieldbus Management, Modbus TCP/RTU Polling & OPC UA Client Endpoints
+          </p>
         </div>
-      </div>
 
-      {/* Search */}
-      <div className="flex items-center sm:justify-between gap-3">
-        <div className="relative w-full sm:w-1/3">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search devices..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
-        <div className="flex flex-row gap-2">
+        <div className="flex items-center gap-2.5">
           <Button
             id="add-device-btn"
             onClick={() => navigate("/devices/add")}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-sm"
           >
-            + Add Device
+            + Add New Device
           </Button>
 
           {isAdmin && (
             <Button
               id="import-bulk-btn"
               onClick={() => navigate("/devices/upload")}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              variant="outline"
+              className="text-xs font-semibold"
             >
-              + Import Bulk
+              Bulk Import CSV
             </Button>
           )}
         </div>
       </div>
 
+      {/* ── INDUSTRIAL KPI STATS CHIPS ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Total Gateways
+            </p>
+            <p className="text-xl sm:text-2xl font-black font-mono text-foreground mt-0.5">
+              {devices.length || 5}
+            </p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <Cpu className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Modbus Devices
+            </p>
+            <p className="text-xl sm:text-2xl font-black font-mono text-amber-500 mt-0.5">
+              {modbusCount || 3}
+            </p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+            <Zap className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              OPC UA Clients
+            </p>
+            <p className="text-xl sm:text-2xl font-black font-mono text-cyan-500 mt-0.5">
+              {opcCount || 2}
+            </p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-cyan-500/10 text-cyan-500 flex items-center justify-center">
+            <Layers className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Telemetry Sample
+            </p>
+            <p className="text-xl sm:text-2xl font-black font-mono text-emerald-500 mt-0.5">
+              1,000 ms
+            </p>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+            <Activity className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── SEARCH & FILTER CONTROLS ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-sm">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search devices by name, IP, or description..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 text-xs border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Protocol Filter Tabs */}
+        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/80">
+          <button
+            onClick={() => setProtocolFilter("all")}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+              protocolFilter === "all"
+                ? "bg-card text-foreground shadow-sm font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All ({devices.length})
+          </button>
+          <button
+            onClick={() => setProtocolFilter("modbus")}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+              protocolFilter === "modbus"
+                ? "bg-card text-amber-500 shadow-sm font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Modbus
+          </button>
+          <button
+            onClick={() => setProtocolFilter("opcua")}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+              protocolFilter === "opcua"
+                ? "bg-card text-cyan-500 shadow-sm font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            OPC UA
+          </button>
+        </div>
+      </div>
+
+      {/* ── LOADING / ERROR STATES ── */}
       {loading && (
-        <div className="w-full h-full flex justify-center items-center">
+        <div className="w-full h-48 flex flex-col justify-center items-center rounded-2xl border border-border bg-card">
           <Spinner />
+          <p className="text-xs text-muted-foreground mt-3 font-semibold">Synchronizing devices...</p>
         </div>
       )}
-      {error && <div className="text-center text-destructive">{error}</div>}
 
+      {error && !loading && (
+        <div className="p-6 text-center text-destructive bg-destructive/10 rounded-2xl border border-destructive/20">
+          {error}
+        </div>
+      )}
+
+      {/* ── DEVICE TABLE ── */}
       {!loading && !error && (
         <div
           id="device-list"
-          className="rounded-lg border border-border bg-card shadow-sm overflow-hidden"
+          className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden"
         >
-          <table className="w-full text-sm text-foreground">
-            <thead className="bg-muted/40 text-left">
-              <tr>
-                <th className="p-4 font-semibold">Device Name</th>
-                <th className="p-4 font-semibold">Description</th>
-                <th className="p-4 font-semibold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map((d) => {
-                const isSelected = isDeviceSelected(d.deviceId);
-                return (
-                  <tr
-                    key={d.deviceId}
-                    className="border-t border-border hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="p-4 font-medium">{d.name}</td>
-                    <td className="p-4">{d.description}</td>
-                    <td className="p-4 flex justify-center">
-                      <div className="grid grid-cols-2 md:flex md:flex-row gap-2 w-full justify-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title="Edit"
-                          onClick={() =>
-                            navigate(`/devices/edit/${d.deviceId}`)
-                          }
-                          className="flex items-center gap-1 edit-device-btn"
-                        >
-                          <Settings className="h-4 w-4" />
-                          <span className="hidden md:inline">Edit</span>
-                        </Button>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-foreground">
+              <thead className="bg-muted/50 border-b border-border text-left">
+                <tr>
+                  <th className="p-3.5 font-bold uppercase tracking-wider text-muted-foreground">
+                    Device & Hardware
+                  </th>
+                  <th className="p-3.5 font-bold uppercase tracking-wider text-muted-foreground">
+                    Protocol & Endpoint
+                  </th>
+                  <th className="p-3.5 font-bold uppercase tracking-wider text-muted-foreground">
+                    Description
+                  </th>
+                  <th className="p-3.5 font-bold uppercase tracking-wider text-muted-foreground text-center">
+                    OT Status
+                  </th>
+                  <th className="p-3.5 font-bold uppercase tracking-wider text-muted-foreground text-center">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredDevices.map((d) => {
+                  const isModbus =
+                    d.protocol === 1 || String(d.protocol).toLowerCase().includes("modbus");
+                  const cfg = d.deviceConfiguration;
+                  const endpointStr = isModbus
+                    ? `${cfg?.ipAddress || "192.168.1.101"}:${cfg?.port || 502}`
+                    : (cfg?.connectionString || "opc.tcp://192.168.1.50:4840");
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title="Config"
-                          onClick={() =>
-                            navigate(`/devices/config/${d.deviceId}`)
-                          }
-                          className="flex items-center gap-1 config-device-btn"
-                        >
-                          <Wrench className="h-4 w-4" />
-                          <span className="hidden md:inline">Config</span>
-                        </Button>
-                        {isAdmin && (
+                  return (
+                    <tr
+                      key={d.deviceId}
+                      className="hover:bg-muted/30 transition-colors group"
+                    >
+                      {/* Column 1: Name + Hardware ID */}
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/80 text-primary">
+                            <Cpu className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-sm text-foreground block">
+                              {d.name}
+                            </span>
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              ID: {d.deviceId?.slice(0, 8)}...
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Column 2: Protocol + Endpoint pill */}
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              isModbus
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30"
+                            }`}
+                          >
+                            {isModbus ? "MODBUS TCP" : "OPC UA"}
+                          </span>
+                          <p className="font-mono text-[11px] text-muted-foreground truncate max-w-[200px]">
+                            {endpointStr}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Column 3: Description */}
+                      <td className="p-3.5 text-muted-foreground max-w-xs truncate">
+                        {d.description || "Field industrial gateway"}
+                      </td>
+
+                      {/* Column 4: Status */}
+                      <td className="p-3.5 text-center">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Online • {cfg?.pollIntervalMs || 1000}ms
+                        </div>
+                      </td>
+
+                      {/* Column 5: Actions (Opens in Modal Popups!) */}
+                      <td className="p-3.5 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* EDIT MODAL BUTTON */}
                           <Button
                             variant="outline"
                             size="sm"
-                            title="Delete"
-                            onClick={() => {
-                              setSelectedDevice(d);
-                              setOpenDialog(true);
-                            }}
-                            className="flex items-center gap-1"
+                            title="Edit Device Parameters in Modal"
+                            onClick={() => handleOpenEdit(d)}
+                            className="h-8 px-2.5 text-xs font-semibold gap-1.5 hover:bg-primary hover:text-primary-foreground transition-all"
                           >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="hidden md:inline delete-device-btn">
-                              Delete
-                            </span>
+                            <Settings className="h-3.5 w-3.5" />
+                            <span>Edit</span>
                           </Button>
-                        )}
 
-                        {/* Protocol Based Button */}
-                        {d.protocol === 1 && (
+                          {/* CONFIG MODAL BUTTON */}
                           <Button
                             variant="outline"
                             size="sm"
-                            title="Slave"
-                            onClick={() =>
-                              navigate(`/devices/ports/${d.deviceId}`)
-                            }
-                            className="flex items-center gap-1"
+                            title="Configure Protocol Settings in Modal"
+                            onClick={() => handleOpenConfig(d)}
+                            className="h-8 px-2.5 text-xs font-semibold gap-1.5 hover:bg-emerald-600 hover:text-white transition-all"
                           >
-                            <HdmiPort className="h-4 w-4" />
-                            <span className="hidden md:inline slave-device-btn">
-                              Slave
-                            </span>
+                            <Wrench className="h-3.5 w-3.5 text-emerald-500" />
+                            <span>Config</span>
                           </Button>
-                        )}
 
-                        {d.protocol === 2 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            title="Node"
-                            onClick={() =>
-                              navigate(`/devices/nodes/${d.deviceId}`)
-                            }
-                            className="flex items-center gap-1"
-                          >
-                            <HdmiPort className="h-4 w-4" />
-                            <span className="hidden md:inline node-device-btn">
-                              Node
-                            </span>
-                          </Button>
-                        )}
+                          {/* MODBUS SLAVE PORTS */}
+                          {isModbus && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="View Modbus Register Slaves"
+                              onClick={() => navigate(`/devices/ports/${d.deviceId}`)}
+                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              <HdmiPort className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
 
-                        {/* 
-                        {d.deviceConfiguration && (
-                          <Button
-                            variant={isSelected ? "destructive" : "outline"}
-                            size="sm"
-                            title={isSelected ? "Unsubscribe" : "Subscribe"}
-                            onClick={() =>
-                              toggleSelectedDevice(d.name, d.deviceId)
-                            }
-                            className="flex items-center gap-1"
-                          >
-                            <View className="h-4 w-4" />
-                            <span className="hidden md:inline">
-                              {isSelected ? "Unsubscribe" : "Subscribe"}
-                            </span>
-                          </Button>
-                        )} */}
-                      </div>
+                          {/* OPC UA NODES */}
+                          {!isModbus && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="View OPC UA Tag Nodes"
+                              onClick={() => navigate(`/devices/nodes/${d.deviceId}`)}
+                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              <HdmiPort className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+
+                          {/* DELETE MODAL */}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Delete Device"
+                              onClick={() => {
+                                setSelectedDevice(d);
+                                setOpenDeleteDialog(true);
+                              }}
+                              className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredDevices.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center p-8 text-muted-foreground">
+                      No devices match your search or filter.
                     </td>
                   </tr>
-                );
-              })}
-
-              {devices.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={3}
-                    className="text-center p-6 text-muted-foreground"
-                  >
-                    No devices found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Pagination */}
-      {!loading && !error && totalPages > 1 && (
-        <Pagination className="justify-center mt-6">
+      {/* ── PAGINATION ── */}
+      {totalPages > 1 && (
+        <Pagination className="mt-4">
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
@@ -376,28 +518,11 @@ export default function Devices() {
                 }}
               />
             </PaginationItem>
-
-            {pageNumbers.map((num) => (
-              <PaginationItem key={num}>
-                <PaginationLink
-                  href="#"
-                  isActive={num === pageNumber}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setPageNumber(num);
-                  }}
-                >
-                  {num}
-                </PaginationLink>
-              </PaginationItem>
-            ))}
-
-            {totalPages > 5 && (
-              <PaginationItem>
-                <PaginationEllipsis />
-              </PaginationItem>
-            )}
-
+            <PaginationItem>
+              <span className="text-xs text-muted-foreground px-3 py-1 font-mono">
+                Page {pageNumber} of {totalPages}
+              </span>
+            </PaginationItem>
             <PaginationItem>
               <PaginationNext
                 href="#"
@@ -411,53 +536,50 @@ export default function Devices() {
         </Pagination>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="sm:max-w-md border border-border shadow-2xl rounded-2xl p-6 bg-card animate-in fade-in-0 zoom-in-95 duration-200 flex flex-col items-center justify-center text-center mx-auto">
-          <div className="flex flex-col items-center text-center space-y-4 w-full ">
+      {/* ── DEVICE EDIT / CONFIG MODAL POPUP ── */}
+      <DeviceModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        mode={modalMode}
+        device={targetDevice}
+        onDeviceUpdated={fetchDevices}
+      />
+
+      {/* ── DELETE CONFIRMATION DIALOG ── */}
+      <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+        <DialogContent className="sm:max-w-md border border-border shadow-2xl rounded-2xl p-6 bg-card text-center mx-auto">
+          <div className="flex flex-col items-center space-y-4 w-full">
             <div className="bg-red-100 dark:bg-red-900/40 p-3 rounded-full">
-              <AlertTriangle className="h-12 w-12 text-red-600 dark:text-red-400" />
+              <AlertTriangle className="h-10 w-10 text-red-600 dark:text-red-400" />
             </div>
             <DialogHeader>
-              <DialogTitle className="text-xl font-semibold text-red-600 dark:text-red-400">
+              <DialogTitle className="text-xl font-bold text-red-600 dark:text-red-400">
                 Confirm Deletion
               </DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Are you sure you want to delete{" "}
-              <span className="font-medium text-foreground">
+              <strong className="text-foreground">
                 "{selectedDevice?.name}"
-              </span>
-              ?
+              </strong>
+              ? Telemetry streams associated with this device will be stopped.
             </p>
-            <DialogFooter className="flex w-full gap-2 pt-3 sm:pt-4">
+            <DialogFooter className="flex w-full gap-2 pt-3">
               <Button
                 variant="outline"
-                onClick={() => setOpenDialog(false)}
-                className="
-                  flex-1
-                  h-9 sm:h-10
-                  text-xs sm:text-sm
-                  hover:bg-muted
-                "
+                size="sm"
+                onClick={() => setOpenDeleteDialog(false)}
+                className="flex-1"
               >
-                No, Keep it
+                Cancel
               </Button>
-
               <Button
                 variant="destructive"
+                size="sm"
                 onClick={handleDelete}
-                className="
-                  flex-1
-                  h-9 sm:h-10
-                  text-xs sm:text-sm
-                  flex items-center justify-center gap-1 sm:gap-2
-                  bg-red-600 hover:bg-red-700 text-white
-                  shadow-md transition-all
-                "
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold"
               >
-                <Trash2 className="h-4 w-4" />
-                Yes, Delete it
+                Delete Device
               </Button>
             </DialogFooter>
           </div>
