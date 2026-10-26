@@ -111,4 +111,19 @@ div[data-aria-hidden="true"][data-state="open"] {
   background-color: transparent !important;
 }
 
+/* Background screen freeze and containment when popups/modals are active */
+body[data-scroll-locked] {
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
+  pointer-events: none !important;
+}
+
+/* Re-enable pointer events for the modal portal */
+[data-radix-portal],
+[role="dialog"],
+[role="alertdialog"] {
+  pointer-events: auto !important;
+}
+
+
 
