@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* PaperPulp Light Theme: Clean Industrial Paper Canvas */
+    --background: 210 25% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 160 84% 36%;           /* Emerald Pulp Green */
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 160 84% 45%;
+    --secondary: 199 89% 44%;         /* Hydro/Cyan Process Accent */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 210 20% 92%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 160 50% 94%;
+    --accent-foreground: 160 84% 25%;
+    --destructive: 0 84% 60%;         /* Sheet Break Red */
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 160 84% 36%;
+    --radius: 0.85rem;
+
+    --sidebar: 215 25% 96%;
+    --sidebar-foreground: 222 47% 15%;
+    --sidebar-border: 214 20% 88%;
+    --sidebar-primary: 160 84% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+  }
+
+  /* PaperPulp Dark Theme: High-Tech Control Room Cockpit */
+  .dark {
+    --background: 224 35% 8%;         /* #0c1017 deep slate */
+    --foreground: 210 30% 98%;
+    --card: 224 30% 11%;              /* #121824 surface */
+    --card-foreground: 210 30% 98%;
+    --popover: 224 30% 11%;
+    --popover-foreground: 210 30% 98%;
+    --primary: 160 80% 45%;           /* Vibrant Pulp Emerald */
+    --primary-foreground: 224 35% 8%;
+    --primary-glow: 160 100% 55%;
+    --secondary: 190 90% 48%;         /* High-visibility Cyan */
+    --secondary-foreground: 224 35% 8%;
+    --muted: 224 25% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 224 25% 16%;
+    --accent-foreground: 160 80% 45%;
+    --destructive: 0 75% 58%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 224 20% 18%;
+    --input: 224 20% 18%;
+    --ring: 160 80% 45%;
+
+    --sidebar: 224 40% 6%;
+    --sidebar-foreground: 210 30% 95%;
+    --sidebar-border: 224 25% 14%;
+    --sidebar-primary: 160 80% 45%;
+    --sidebar-primary-foreground: 224 35% 8%;
+  }
+}
+
+body {
+  @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20 selection:text-primary;
+}
+
+/* Glassmorphism & High-Tech Containers */
+.glass-card {
+  @apply bg-card/75 backdrop-blur-xl border border-border/60 rounded-xl shadow-lg transition-all duration-300;
+}
+
+.glass-panel {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(16, 185, 129, 0.05) 0%, rgba(17, 24, 39, 0.6) 100%);
+  @apply backdrop-blur-xl border border-border/50 rounded-2xl shadow-xl;
+}
+
+.glow-emerald {
+  box-shadow: 0 0 25px -4px rgba(16, 185, 129, 0.35);
+}
+
+.glow-crimson {
+  box-shadow: 0 0 25px -4px rgba(239, 68, 68, 0.45);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.35);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+div[data-aria-hidden="true"][data-state="open"] {
+  background-color: transparent !important;
+}
+
+

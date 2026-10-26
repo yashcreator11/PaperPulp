@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Logs Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 20px;
+            background: #ecf0f1;
+            border-bottom: 1px solid #bdc3c7;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .control-group label {
+            font-weight: bold;
+            color: #333;
+            font-size: 0.9em;
+        }
+
+        .control-group input,
+        .control-group select {
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+
+        .content {
+            padding: 20px;
+            min-height: 400px;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            display: none;
+            color: #3498db;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #ecf0f1;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            display: none;
+        }
+
+        .table-wrapper.show {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #bdc3c7;
+        }
+
+        thead {
+            background: #34495e;
+            color: white;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        tbody tr:hover {
+            background: #f9f9f9;
+        }
+
+        .status-code {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+
+        .status-2xx {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-4xx {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-5xx {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 0.85em;
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #bdc3c7;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 6px 12px;
+            min-width: 40px;
+            background: #ecf0f1;
+            color: #333;
+            border: 1px solid #bdc3c7;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .pagination button.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+            font-weight: bold;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-info {
+            text-align: center;
+            width: 100%;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+            }
+
+            .control-group {
+                min-width: 100%;
+            }
+
+            .button-group {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            th, td {
+                padding: 8px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 HTTP Logs Viewer</h1>
+            <p>Monitor and analyze API requests</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="searchInput">Search</label>
+                <input type="text" id="searchInput" placeholder="Search logs...">
+            </div>
+
+            <div class="control-group">
+                <label for="methodFilter">Method</label>
+                <select id="methodFilter">
+                    <option value="">All</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="pageSize">Page Size</label>
+                <select id="pageSize">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                    <option value="10000">10000</option>
+
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="app.loadLogs()">🔍 Load</button>
+                <button class="btn-success" onclick="app.exportCSV()">📥 Export</button>
+                <button class="btn-secondary" onclick="app.reset()">↻ Reset</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="message" class="message"></div>
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Loading logs...</p>
+            </div>
+            <div id="tableWrapper" class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Timestamp</th>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTable"></tbody>
+                </table>
+                <div class="pagination" id="pagination"></div>
+                <div class="pagination-info" id="pageInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            allLogs: [],
+            filteredLogs: [],
+            currentPage: 1,
+            pageSize: 20,
+            isLoading: false,
+
+            showMessage(text, type = 'info') {
+                const el = document.getElementById('message');
+                el.textContent = text;
+                el.className = `message show ${type}`;
+            },
+
+            hideMessage() {
+                document.getElementById('message').className = 'message';
+            },
+
+            showLoader() {
+                document.getElementById('loading').classList.add('show');
+                document.getElementById('tableWrapper').classList.remove('show');
+            },
+
+            hideLoader() {
+                document.getElementById('loading').classList.remove('show');
+            },
+
+            showTable() {
+                document.getElementById('tableWrapper').classList.add('show');
+            },
+
+            hideTable() {
+                document.getElementById('tableWrapper').classList.remove('show');
+            },
+
+            async loadLogs() {
+                if (this.isLoading) return;
+
+                const search = document.getElementById('searchInput').value.toLowerCase();
+                const method = document.getElementById('methodFilter').value;
+                this.pageSize = parseInt(document.getElementById('pageSize').value);
+
+                this.isLoading = true;
+                this.hideMessage();
+                this.showLoader();
+
+                try {
+                    const url = 'https://wmind.wonderbiz.org/api/auth/User/logs?' + 
+                        new URLSearchParams({ q: search, method: method, page: 1, pageSize: this.pageSize });
+
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        mode: 'cors'
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                    const data = await response.json();
+                    this.allLogs = Array.isArray(data) ? data : (data.data || data.logs || []);
+
+                    if (this.allLogs.length === 0) {
+                        this.hideLoader();
+                        this.hideTable();
+                        this.showMessage('⚠️ No logs found', 'info');
+                        this.isLoading = false;
+                        return;
+                    }
+
+                    this.currentPage = 1;
+                    this.filter();
+                    this.hideLoader();
+                    this.showMessage(`✅ Loaded ${this.allLogs.length} logs`, 'success');
+                } catch (error) {
+                    this.hideLoader();
+                    this.hideTable();
+                    this.showMessage(`❌ Error: ${error.message}`, 'error');
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+
+            filter() {
+                const search = document.getElementById('searchInput').value.toLowerCase();
+                const method = document.getElementById('methodFilter').value;
+
+                this.filteredLogs = this.allLogs.filter(log => {
+                    const matchSearch = !search || JSON.stringify(log).toLowerCase().includes(search);
+                    const matchMethod = !method || log.method === method;
+                    return matchSearch && matchMethod;
+                });
+
+                this.filteredLogs.sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
+
+                this.currentPage = 1;
+                this.display();
+            },
+
+            display() {
+                if (this.filteredLogs.length === 0) {
+                    this.hideTable();
+                    this.showMessage('❌ No logs match your filters', 'info');
+                    return;
+                }
+
+                const start = (this.currentPage - 1) * this.pageSize;
+                const end = start + this.pageSize;
+                const pageData = this.filteredLogs.slice(start, end);
+
+                const tbody = document.getElementById('logsTable');
+                tbody.innerHTML = '';
+
+                pageData.forEach(log => {
+                    const row = tbody.insertRow();
+                    const time = log.message.match(/(\d+)\s*ms/)?.[1] || 'N/A';
+                    const statusClass = log.statusCode >= 500 ? 'status-5xx' : 
+                                       log.statusCode >= 400 ? 'status-4xx' : 'status-2xx';
+                    const utcDate = new Date(log.timeStamp);
+                    const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+                    const date = istDate.toLocaleString('en-IN');
+
+                    row.innerHTML = `
+                        <td>${log.id}</td>
+                        <td>${date}</td>
+                        <td><span class="method-badge">${log.method}</span></td>
+                        <td>${log.path}</td>
+                        <td><span class="status-code ${statusClass}">${log.statusCode}</span></td>
+                        <td>${time} ms</td>
+                        <td>${log.userName}</td>
+                        <td>${log.message}</td>
+                    `;
+                });
+
+                this.updatePagination();
+                this.showTable();
+            },
+
+            updatePagination() {
+                const total = Math.ceil(this.filteredLogs.length / this.pageSize);
+                const paginationEl = document.getElementById('pagination');
+                paginationEl.innerHTML = '';
+
+                const prevBtn = document.createElement('button');
+                prevBtn.textContent = '← Prev';
+                prevBtn.disabled = this.currentPage === 1;
+                prevBtn.onclick = () => { this.currentPage--; this.display(); };
+                paginationEl.appendChild(prevBtn);
+
+                for (let i = 1; i <= total; i++) {
+                    const btn = document.createElement('button');
+                    btn.textContent = i;
+                    if (i === this.currentPage) btn.classList.add('active');
+                    btn.onclick = () => { this.currentPage = i; this.display(); };
+                    paginationEl.appendChild(btn);
+                }
+
+                const nextBtn = document.createElement('button');
+                nextBtn.textContent = 'Next →';
+                nextBtn.disabled = this.currentPage === total;
+                nextBtn.onclick = () => { this.currentPage++; this.display(); };
+                paginationEl.appendChild(nextBtn);
+
+                document.getElementById('pageInfo').textContent = 
+                    `Page ${this.currentPage} of ${total}`;
+            },
+
+            exportCSV() {
+                if (this.filteredLogs.length === 0) {
+                    this.showMessage('❌ No data to export', 'error');
+                    return;
+                }
+
+                const headers = ['ID', 'Timestamp', 'Method', 'Path', 'Status', 'User', 'Message'];
+                const rows = this.filteredLogs.map(log => [
+                    log.id,
+                    new Date(log.timeStamp).toLocaleString(),
+                    log.method,
+                    log.path,
+                    log.statusCode,
+                    log.userName,
+                    log.message
+                ]);
+
+                const csv = [headers.join(','), 
+                    ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                this.showMessage('✅ Exported successfully', 'success');
+            },
+
+            reset() {
+                document.getElementById('searchInput').value = '';
+                document.getElementById('methodFilter').value = '';
+                document.getElementById('pageSize').value = '20';
+                this.allLogs = [];
+                this.filteredLogs = [];
+                this.currentPage = 1;
+                this.hideTable();
+                this.hideLoader();
+                this.hideMessage();
+                this.showMessage('👋 Click "Load" to fetch logs', 'info');
+            }
+        };
+
+        window.addEventListener('load', () => {
+            app.showMessage('👋 Click "Load" to fetch logs', 'info');
+        });
+    </script>
+</body>
+</html>

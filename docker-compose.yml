@@ -1,0 +1,266 @@
+networks:
+  tmind-net:
+
+volumes:
+  tminddb:
+  influxdb:
+  rabbitmq:
+  qdrant:
+
+services:
+
+  # ===================== DATABASES =====================
+
+  tmind-sql:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "${SA_PASSWORD}"
+    volumes:
+      - tminddb:/var/opt/mssql
+    ports:
+      - "1433:1433"
+    networks:
+      - tmind-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  influxdb:
+    image: influxdb:2.7
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb:/var/lib/influxdb2
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    build: ./rabbitmq
+    ports:
+      - "5671:5671"  # TLS AMQP
+      - "5672:5672"  # Standard AMQP
+      - "15672:15672" # Management
+    volumes:
+      - ./certs:/certs
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    environment:
+     RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+     RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS}
+    networks:
+      - tmind-net
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant:/qdrant/storage
+    networks:
+      - tmind-net
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - "echo > /dev/tcp/127.0.0.1/6333"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ===================== BACKEND SERVICES =====================
+
+  auth-service:
+    build: ./services/auth-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__AuthDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2Auth; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: AssetNodeAPI
+      Jwt__Audience: AssetNodeClient
+    depends_on:
+      tmind-sql:
+        condition: service_healthy
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://auth-service:5001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  seq:
+    image: datalust/seq:latest
+    container_name: tmind-seq
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_ADMINPASSWORD: "YourPasswordHere"
+    volumes:
+      - ./logs/seq:/data
+    networks:
+      - tmind-net
+
+  device-service:
+    build: ./services/device-service
+    depends_on:
+      tmind-sql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DeviceDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      ConnectionStrings__AssetDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2Asset; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__User: ${RABBIT_USER}
+      RabbitMQ__Pass: ${RABBIT_PASS}
+      RabbitMQ__Exchange: telemetry_exchange
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: AssetNodeAPI
+      Jwt__Audience: AssetNodeClient
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://device-service:5002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+    restart: on-failure
+
+  asset-service:
+    build: ./services/asset-service
+    depends_on:
+      tmind-sql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__AssetDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2Asset; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      ConnectionStrings__AuthDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2Auth; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      Telemetry__RabbitHost: rabbitmq
+      Telemetry__RabbitUser: ${RABBIT_USER}
+      Telemetry__RabbitPass: ${RABBIT_PASS}
+      Telemetry__Queue: telemetry_queue
+      Telemetry__ReportRequestQueue: ReportRequest_queue
+      InfluxDb__InfluxUrl: http://influxdb:8086
+      InfluxDb__InfluxToken: ${INFLUX_TOKEN}
+      InfluxDb__InfluxOrg: ${INFLUX_ORG}
+      InfluxDb__InfluxBucket: ${INFLUX_BUCKET}
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: AssetNodeAPI
+      Jwt__Audience: AssetNodeClient
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://asset-service:5003/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 15 
+    restart: on-failure
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs/gateway:/app/logs
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      asset-service:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Gateway__Url: http://0.0.0.0:5000
+      ConnectionStrings__AuthDbConnection: >
+        Server=tmind-sql,1433; Database=TmindDB2Auth; User Id=sa;
+        Password=${SA_PASSWORD}; TrustServerCertificate=True;
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: AssetNodeAPI
+      Jwt__Audience: AssetNodeClient
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://gateway:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ai-server:
+    build: ./ai-server
+    depends_on:
+      tmind-sql:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    environment:
+      PORT: 5004
+      SQL_SERVER_HOST: tmind-sql
+      SQL_SERVER_DB: TmindDB2Asset
+      SQL_SERVER_USER: sa
+      SQL_SERVER_PASSWORD: ${SA_PASSWORD}
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GROQ_MODEL: llama-3.1-8b-instant
+    networks:
+      - tmind-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://ai-server:5004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL:
+    depends_on:
+      - gateway
+    environment:
+      VITE_API_URL: http://localhost:5000
+    networks:
+      - tmind-net

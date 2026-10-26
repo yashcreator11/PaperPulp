@@ -1,0 +1,9 @@
+node_modules/
+qdrant_data/
+coverage/
+uploads/
+.git/
+.env
+docker-compose*.yml
+Dockerfile*
+

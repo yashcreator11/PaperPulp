@@ -1,0 +1,235 @@
+name: SonarCloud Analysis
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unified single-project scan for the entire monorepo.
+# Includes:
+# - auth-service
+# - device-service
+# - asset-service
+# - frontend
+# - ai-server
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  sonar-unified:
+    name: SonarCloud Unified Analysis
+    runs-on: windows-latest
+
+    if: github.actor != 'dependabot[bot]'
+
+    steps:
+      # ─────────────────────────────────────────────────────────────
+      # Checkout
+      # ─────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ─────────────────────────────────────────────────────────────
+      # Java (required for SonarScanner)
+      # ─────────────────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: zulu
+
+      # ─────────────────────────────────────────────────────────────
+      # Node.js
+      # ─────────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # ─────────────────────────────────────────────────────────────
+      # .NET
+      # ─────────────────────────────────────────────────────────────
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      # ─────────────────────────────────────────────────────────────
+      # Cache SonarCloud packages
+      # ─────────────────────────────────────────────────────────────
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~\sonar\cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      # ─────────────────────────────────────────────────────────────
+      # Cache Sonar scanner
+      # ─────────────────────────────────────────────────────────────
+      - name: Cache SonarCloud scanner
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\scanner
+          key: ${{ runner.os }}-sonar-scanner
+          restore-keys: ${{ runner.os }}-sonar-scanner
+
+      - name: Install SonarCloud scanner
+        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
+          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
+
+      # ─────────────────────────────────────────────────────────────
+      # FRONTEND TESTS + COVERAGE
+      # ─────────────────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        shell: powershell
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run frontend tests with coverage
+        shell: powershell
+        run: |
+          cd frontend
+          npm run test:coverage
+
+      # ─────────────────────────────────────────────────────────────
+      # AI SERVER TESTS + COVERAGE
+      # ─────────────────────────────────────────────────────────────
+      - name: Install AI server dependencies
+        shell: powershell
+        run: |
+          cd ai-server
+          npm ci
+
+      - name: Run AI server tests with coverage
+        shell: powershell
+        run: |
+          cd ai-server
+          npm run test:coverage
+        continue-on-error: true
+
+      # ─────────────────────────────────────────────────────────────
+      # BEGIN SONARCLOUD SCAN
+      # ─────────────────────────────────────────────────────────────
+      - name: Begin SonarCloud scan
+        shell: powershell
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin `
+            /k:"wonderbiz-vibe-coders_wMind" `
+            /o:"wonderbiz-vibe-coders" `
+            /n:"wMind" `
+            /d:sonar.host.url="https://sonarcloud.io" `
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.exclusions="**/node_modules/**,**/dist/**,**/obj/**,**/bin/**,**/coverage/**,**/coverage-report/**,**/coveragereport/**,**/TestResults/**,**/qdrant_data/**,**/uploads/**,**/Migrations/**,**/*.Designer.cs,**/wwwroot/**,**/*.html,**/*.htm,logs.html,**/Class1.cs" `
+            /d:sonar.cpd.exclusions="**/Migrations/**,**/*.Designer.cs,**/components/ui/**,**/*.d.ts,**/tour/**,**/coverage-report/**,**/coveragereport/**,**/Class1.cs" `
+            /d:sonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info,ai-server/coverage/lcov.info" `
+            /d:sonar.typescript.lcov.reportPaths="frontend/coverage/lcov.info" `
+            /d:sonar.cs.opencover.reportsPaths="services/auth-service/TestResults/**/coverage.opencover.xml,services/device-service/TestResults/**/coverage.opencover.xml,services/asset-service/TestResults/**/coverage.opencover.xml" `
+            /d:sonar.test.exclusions="**/__tests__/**,**/*.test.js,**/*.test.ts,**/*.spec.ts,**/tests/**"
+
+      # ─────────────────────────────────────────────────────────────
+      # BUILD AUTH SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Build auth-service
+        shell: powershell
+        run: |
+          dotnet build ./services/auth-service/AuthMicroservice.sln `
+            --configuration Release
+
+      # ─────────────────────────────────────────────────────────────
+      # TEST AUTH SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Test auth-service (coverage)
+        shell: powershell
+        run: |
+          dotnet test ./services/auth-service/AuthMicroservice.sln `
+            --configuration Release `
+            --no-build `
+            --results-directory "services/auth-service/TestResults" `
+            --collect:"XPlat Code Coverage" `
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      # ─────────────────────────────────────────────────────────────
+      # BUILD DEVICE SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Build device-service
+        shell: powershell
+        run: |
+          dotnet build ./services/device-service/TataPlant.sln `
+            --configuration Release
+
+      # ─────────────────────────────────────────────────────────────
+      # TEST DEVICE SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Test device-service (coverage)
+        shell: powershell
+        run: |
+          dotnet test ./services/device-service/TataPlant.sln `
+            --configuration Release `
+            --no-build `
+            --results-directory "services/device-service/TestResults" `
+            --collect:"XPlat Code Coverage" `
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      # ─────────────────────────────────────────────────────────────
+      # BUILD ASSET SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Build asset-service
+        shell: powershell
+        run: |
+          dotnet build ./services/asset-service/TataPlantAsset.sln `
+            --configuration Release `
+            /p:TreatWarningsAsErrors=false
+
+      # ─────────────────────────────────────────────────────────────
+      # TEST ASSET SERVICE
+      # ─────────────────────────────────────────────────────────────
+      - name: Test asset-service (coverage)
+        shell: powershell
+        run: |
+          dotnet test ./services/asset-service/TataPlantAsset.sln `
+            --configuration Release `
+            --no-build `
+            --results-directory "services/asset-service/TestResults" `
+            --collect:"XPlat Code Coverage" `
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      # ─────────────────────────────────────────────────────────────
+      # BUILD GATEWAY
+      # ─────────────────────────────────────────────────────────────
+      - name: Build gateway
+        shell: powershell
+        run: |
+          dotnet build ./gateway/gateway.sln `
+            --configuration Release
+
+      # ─────────────────────────────────────────────────────────────
+      # END SONARCLOUD SCAN
+      # ─────────────────────────────────────────────────────────────
+      - name: End SonarCloud scan
+        shell: powershell
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner end `
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

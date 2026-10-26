@@ -1,0 +1,21 @@
+assetName,parentName,level
+PaperPulp Integrated Mill 1,,1
+Fiberline Department,PaperPulp Integrated Mill 1,2
+Chemical Recovery and Utilities,PaperPulp Integrated Mill 1,2
+Paper Machine Mill,PaperPulp Integrated Mill 1,2
+Kraft Pulping Line A,Fiberline Department,3
+Black Liquor Recovery Loop,Chemical Recovery and Utilities,3
+High Speed Paper Machine Line 1,Paper Machine Mill,3
+Continuous Digester FL-DIG-V01,Kraft Pulping Line A,4
+Brownstock Drum Washer FL-BSW-W01,Kraft Pulping Line A,4
+Oxygen Reactor FL-O2-R01,Kraft Pulping Line A,4
+Bleach D0 Tower FL-BLC-T01,Kraft Pulping Line A,4
+Multiple Effect Evaporator CR-CR2-C01,Black Liquor Recovery Loop,4
+Kraft Recovery Boiler CR-CR3-F01,Black Liquor Recovery Loop,4
+Causticizing Slaker and Kiln CR-CR5-C01,Black Liquor Recovery Loop,4
+Paper Machine 1 Main Section,High Speed Paper Machine Line 1,4
+Headbox Approach Flow PM-PM1-H01,Paper Machine 1 Main Section,5
+Fourdrinier Forming Table PM-PM1-W01,Paper Machine 1 Main Section,5
+3-Nip Press Section PM-PM1-P01,Paper Machine 1 Main Section,5
+Dryer Cylinder Section PM-PM1-D01,Paper Machine 1 Main Section,5
+Calender and Pope Reel PM-PM1-R01,Paper Machine 1 Main Section,5

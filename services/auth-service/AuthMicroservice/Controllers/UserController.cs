@@ -1,0 +1,429 @@
+﻿using AuthMicroservice.Application.Dtos;
+using System.Security.Claims;
+using AuthMicroservice.Application.Interface;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Net.WebSockets;
+using Microsoft.EntityFrameworkCore;
+using AuthMicroservice.Infrastructure.Persistance.DbContexts;
+using Microsoft.Data.SqlClient;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+//localhost
+
+
+
+namespace AuthMicroservice.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class UserController : Controller
+    {
+        private readonly IUserService _userService;
+        private readonly UserDbContext _db;
+
+        public UserController(IUserService userService, UserDbContext db)
+        {
+            _userService = userService;
+            _db = db;
+        }
+
+
+       
+
+
+        [HttpGet]
+        public async Task<ActionResult> GetUsers()
+        {
+            try
+            {
+                var users = await _userService.GetAllAsync();
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult> GetUser(int id)
+        {
+            try
+            {
+                var user = await _userService.GetByIdAsync(id);
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+        }
+
+        [HttpPost("Register")]
+        public async Task<ActionResult> CreateUser([FromBody] CreateUserDto userDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { Message = "Invalid input data.", Errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+
+                var createdUser = await _userService.CreateAsync(userDto);
+                return CreatedAtAction(nameof(GetUser), new { id = createdUser.UserId }, createdUser);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto userDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { Message = "Invalid input data.", Errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+
+                await _userService.UpdateAsync(id, userDto);
+                return Ok(new { Message = "User updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles ="Admin")]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteUser(int id)
+        {
+            try
+            {
+                await _userService.DeleteAsync(id);
+                return Ok(new { Message = $"User with ID {id} deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+        }
+
+        [HttpPost("Login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+        {
+            try
+            {
+                var (accessToken, refreshToken) = await _userService.LoginAsync(loginDto);
+
+                var accessCookieOption = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                     //Domain = "localhost", // for local enviornment hange it to localhost ad of rdeployment chaneg to tmin.wonderbiz.org
+                    MaxAge = TimeSpan.FromHours(1)
+                };
+                Response.Cookies.Append("access_token", accessToken, accessCookieOption);
+
+                var refreshCookieOption = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    //Domain = "localhost",
+                    Expires = DateTime.UtcNow.AddDays(7)
+                };
+                Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
+
+                return Ok(new { access_token = accessToken, refresh_token = refreshToken, message = "Login successful" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+
+        [HttpGet("login-google")]
+        public IActionResult GoogleLogin()
+        {
+            var properties = new AuthenticationProperties
+            {
+                RedirectUri = Url.Action("callback")
+            };
+            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+        }
+
+        [HttpGet("callback")]
+        public async Task<IActionResult> GoogleCallback()
+        {
+            try
+            {
+                var result = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                if (!result.Succeeded)
+                    return Unauthorized(new { Message = "Google authentication failed" });
+
+                var (accessToken, oAuthUser) = await _userService.HandleGoogleCallbackAsync(result.Ticket);
+
+                var cookieOption = new CookieOptions
+                {
+                    HttpOnly = true,
+                   Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    //Domain = "localhost",
+                    MaxAge = TimeSpan.FromHours(1)
+                };
+                Response.Cookies.Append("access_token", accessToken, cookieOption);
+
+                return Redirect("https://localhost:5000/Dashboard?googleLogin=true");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("me")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        public async Task<IActionResult> GetCurrentUser()
+        {
+            try
+            {
+                // CS8604 fix: guard null cast before passing to service
+                var identity = HttpContext.User.Identity as ClaimsIdentity
+                    ?? throw new UnauthorizedAccessException("No claims identity found.");
+                var user = await _userService.GetCurrentUserAsync(identity);
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized(new { Message = ex.Message });
+            }
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            try
+            {
+                var refreshToken = Request.Cookies["refresh_token"] ?? string.Empty;
+                await _userService.LogoutAsync(refreshToken);
+
+                var cookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    Expires = DateTime.UtcNow.AddDays(-1)
+                };
+
+                Response.Cookies.Delete("access_token", cookieOptions);
+                Response.Cookies.Delete("refresh_token", cookieOptions);
+
+                return Ok(new { Message = "Logged out successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken()
+        {
+            try
+            {
+                // CS8604 fix: missing cookie should return 401, not crash
+                var refreshToken = Request.Cookies["refresh_token"]
+                    ?? throw new UnauthorizedAccessException("Refresh token cookie is missing.");
+
+                var (accessToken, newRefreshToken) = await _userService.RefreshTokenAsync(refreshToken);
+
+                Response.Cookies.Append("access_token", accessToken, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    MaxAge = TimeSpan.FromHours(1)
+                });
+
+                Response.Cookies.Append("refresh_token", newRefreshToken, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    Expires = DateTime.UtcNow.AddDays(7)
+                });
+
+                return Ok(new { access_token = accessToken });
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized(new { Message = ex.Message });
+            }
+        }
+
+        // GET: api/user/tour-status
+        [HttpGet("tour-status")]
+        public async Task<IActionResult> GetTourStatus()
+        {
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            var userIdClaim = identity?.FindFirst("UserId")?.Value;
+
+            if (userIdClaim == null) return Unauthorized();
+
+            var userId = int.Parse(userIdClaim);
+            var isTourCompleted = await _userService.GetTourStatusAsync(userId);
+
+            return Ok(new { isTourCompleted });
+        }
+
+
+        // POST: api/user/complete-tour
+        [HttpPost("complete-tour")]
+        public async Task<IActionResult> CompleteTour()
+        {
+            var identity = HttpContext.User.Identity as ClaimsIdentity;
+            var userIdClaim = identity?.FindFirst("UserId")?.Value;
+            if (userIdClaim == null) return Unauthorized();
+
+            var userId = int.Parse(userIdClaim);
+            await _userService.MarkTourCompletedAsync(userId);
+
+            return Ok();
+        }
+
+
+        [HttpPost("OtpVerify")]
+        public async Task<IActionResult> VerifyOtp([FromBody] OtpDto dto)
+        {
+            try
+            {
+                var (accessToken, refreshToken) = await _userService.VerifyOtpAndGenerateJwt(dto);
+
+                var accessCookieOption = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    //Domain = "localhost",
+                    MaxAge = TimeSpan.FromHours(1)
+                };
+                Response.Cookies.Append("access_token", accessToken, accessCookieOption);
+
+                var refreshCookieOption = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    //Domain = "localhost",
+                    Expires = DateTime.UtcNow.AddDays(7)
+                };
+                Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
+                return Ok(new { access_token = accessToken, refresh_token = refreshToken, message = "Login successful" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+
+
+        }
+
+
+
+        [Authorize(Roles ="Admin")]
+        [HttpPatch("{id}/role")]
+        public async Task<IActionResult> UpdateUserRole([FromRoute] int id, [FromBody] RoleUpdateDto dto)
+        {
+            if (dto == null)
+                return BadRequest("Request body cannot be null.");
+
+            try
+            {
+                await _userService.UpdateUserRoleAsync(id, dto.Role);
+                return Ok(new { Message = $"Role updated successfully Please Login Again" +
+                    $"" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Error = "Something went wrong.", Details = ex.Message });
+            }
+
+        }
+
+
+ 
+    [HttpGet("logs")]
+public async Task<IActionResult> Get(
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 50,
+    [FromQuery] string? q = null,              // free-text search
+    [FromQuery] int? statusCode = null,        // exact match
+    [FromQuery] string? method = null)          // GET / POST
+{
+    if (page <= 0) page = 1;
+    if (pageSize > 200) pageSize = 200;
+
+    var offset = (page - 1) * pageSize;
+
+    var sql = @"
+        SELECT
+            Id,
+            TimeStamp,
+            Message,
+            UserName,
+            Method,
+            Path,
+            StatusCode
+        FROM ApiLogs
+        WHERE 1 = 1
+          AND (@StatusCode IS NULL OR StatusCode = @StatusCode)
+          AND (@Method IS NULL OR Method = @Method)
+          AND (
+                @Q IS NULL
+                OR UserName LIKE '%' + @Q + '%'
+                OR Path     LIKE '%' + @Q + '%'
+                OR Message  LIKE '%' + @Q + '%'
+              )
+        ORDER BY TimeStamp DESC
+        OFFSET @Offset ROWS
+        FETCH NEXT @PageSize ROWS ONLY;
+    ";
+
+    var logs = await _db.Database
+        .SqlQueryRaw<ApiLogDto>(
+            sql,
+            new SqlParameter("@Offset", offset),
+            new SqlParameter("@PageSize", pageSize),
+            new SqlParameter("@Q", (object?)q ?? DBNull.Value),
+            new SqlParameter("@StatusCode", (object?)statusCode ?? DBNull.Value),
+            new SqlParameter("@Method", (object?)method ?? DBNull.Value)
+        )
+        .ToListAsync();
+
+    return Ok(logs);
+}
+
+
+    }
+}

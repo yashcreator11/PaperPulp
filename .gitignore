@@ -1,0 +1,86 @@
+# =====================
+# Environment files
+# =====================
+.env
+.env.*
+!.env.example
+
+# =====================
+# Secrets & private keys — NEVER commit these
+# =====================
+*.key
+*.pem
+*.p12
+*.pfx
+appsettings.Development.json
+appsettings.Production.json
+
+# =====================
+# Docker volumes / runtime data
+# =====================
+
+**/volumes/
+**/storage/
+
+# =====================
+# .NET
+# =====================
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# =====================
+# Node / Frontend
+# =====================
+**/node_modules/
+**/dist/
+**/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# =====================
+# Logs
+# =====================
+*/log
+**.log
+*/logs
+**/logs
+/logs
+
+# =====================
+# OS / IDE
+# =====================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =====================
+# Python (ai-server)
+# =====================
+__pycache__/
+*.pyc
+.venv/
+
+
+
+# =====================
+# Coverage & test reports
+# =====================
+**/coverage/
+**/coverage-report/
+**/coveragereport/
+**/TestResults/
+**/*.opencover.xml
+**/lcov.info
+
+# =====================
+# Misc generated files
+# =====================
+logs.html
+**/Class1.cs
+
+
+# .gitignore
+ai-server/coverage/

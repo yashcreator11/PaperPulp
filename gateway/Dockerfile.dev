@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+WORKDIR /app
+
+# copy only csproj first for restore cache
+COPY *.csproj ./
+
+# copy everything else
+COPY . .
+
+RUN dotnet restore
+ENV ASPNETCORE_URLS=http://0.0.0.0:5000
+ENV ASPNETCORE_ENVIRONMENT=Development
+
+EXPOSE 5000
+
+CMD ["dotnet", "watch", "run", "--no-launch-profile"]

@@ -1,0 +1,11 @@
+FROM rabbitmq:3-management
+
+COPY setup-certs.sh /usr/local/bin/setup-certs.sh
+
+# Fix Windows line endings and set permissions
+RUN apt-get update && apt-get install -y dos2unix \
+    && dos2unix /usr/local/bin/setup-certs.sh \
+    && chmod +x /usr/local/bin/setup-certs.sh \
+    && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/usr/local/bin/setup-certs.sh"]

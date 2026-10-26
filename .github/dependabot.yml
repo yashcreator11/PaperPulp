@@ -1,0 +1,29 @@
+version: 2
+updates:
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Frontend npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "frontend"
+
+  # AI Server npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/ai-server"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ai-server"

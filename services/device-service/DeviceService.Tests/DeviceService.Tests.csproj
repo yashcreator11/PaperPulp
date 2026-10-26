@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- ── Test framework ── -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"          Version="17.11.1" />
+    <PackageReference Include="xunit"                           Version="2.9.0"   />
+    <PackageReference Include="xunit.runner.visualstudio"       Version="2.8.2"   />
+    <PackageReference Include="coverlet.collector"              Version="6.0.2"   />
+  </ItemGroup>
+
+  <!-- ── Mocking ── -->
+  <ItemGroup>
+    <PackageReference Include="Moq"                             Version="4.20.72" />
+  </ItemGroup>
+
+  <!-- ── EF Core in-memory provider ── -->
+  <ItemGroup>
+	  <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.10" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore"          Version="9.0.10" />
+  </ItemGroup>
+
+  <!-- ── Reference the service project under test ── -->
+  <ItemGroup>
+    <!--
+      Adjust the relative path to point at your MyApp.Infrastructure project.
+      Assuming this test project lives at:
+        services/device-service/DeviceService.Tests/DeviceService.Tests.csproj
+    -->
+    <ProjectReference Include="..\MyApp.Infrastructure\MyApp.Infrastructure.csproj" />
+    <ProjectReference Include="..\MyApp.Application\MyApp.Application.csproj"       />
+    <ProjectReference Include="..\MyApp.Domain\MyApp.Domain.csproj"                 />
+  </ItemGroup>
+
+</Project>

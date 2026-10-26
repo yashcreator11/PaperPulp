@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0
+
+WORKDIR /app
+
+# Copy solution + project files first (better caching)
+COPY TataPlantAsset.sln .
+COPY Api/Api.csproj Api/
+
+
+# Copy remaining source
+COPY . .
+RUN dotnet restore TataPlantAsset.sln
+
+ENV ASPNETCORE_URLS=http://0.0.0.0:5003
+ENV ASPNETCORE_ENVIRONMENT=Development
+
+EXPOSE 5003
+
+CMD ["dotnet", "watch", "--project", "Api/Api.csproj", "run", "--no-launch-profile"]
