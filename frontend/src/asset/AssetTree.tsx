@@ -6,7 +6,7 @@ import React, {
   useRef,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronRight,
   ChevronDown,
@@ -647,6 +647,39 @@ export default function AssetHierarchyPage({
     () => (selectedAsset ? buildBreadcrumb(assets, selectedAsset.assetId) : []),
     [assets, selectedAsset],
   );
+
+  const [searchParams] = useSearchParams();
+
+  // Auto-select asset when navigated with ?selectedAsset=... or ?assetId=...
+  useEffect(() => {
+    const target = searchParams.get("selectedAsset") || searchParams.get("assetId");
+    if (!target || assets.length === 0) return;
+
+    const findMatch = (nodes: BackendAsset[]): BackendAsset | null => {
+      for (const n of nodes) {
+        if (
+          n.assetId.toLowerCase() === target.toLowerCase() ||
+          n.name.toLowerCase().includes(target.toLowerCase()) ||
+          target.toLowerCase().includes(n.name.toLowerCase())
+        ) {
+          return n;
+        }
+        const childMatch = findMatch(n.childrens);
+        if (childMatch) return childMatch;
+      }
+      return null;
+    };
+
+    const matched = findMatch(assets);
+    if (matched) {
+      setSelectedAsset(matched);
+      setExpandedMap((prev) => {
+        const next = { ...prev, [matched.assetId]: true };
+        if (matched.parentId) next[matched.parentId] = true;
+        return next;
+      });
+    }
+  }, [searchParams, assets]);
 
   // ── Tree modal state ────────────────────────────────────────────────────────
   const [showAddRootModal, setShowAddRootModal] = useState(false);

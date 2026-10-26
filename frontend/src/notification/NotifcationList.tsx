@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
+import AssetTelemetryGraphModal, { type AssetTelemetryAlertData } from "@/components/AssetTelemetryGraphModal";
 
 export const NotificationList = () => {
   const {
@@ -33,6 +34,7 @@ export const NotificationList = () => {
   const [filter, setFilter] = useState<"all" | "unread" | "read" | "critical">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
+  const [selectedAlertForGraph, setSelectedAlertForGraph] = useState<AssetTelemetryAlertData | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
   const fmt = (n: number | null | undefined) =>
@@ -395,25 +397,51 @@ export const NotificationList = () => {
                         <span>Break hazard risk elevated. Advance lead time available.</span>
                       </div>
 
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          setSelectedAlertForRca({
-                            assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
-                            signalName: data.signal || "Operational Variable",
-                            severity: isHigh ? "Critical" : "Medium",
-                            observedValue: data.value,
-                            thresholdValue: isHigh ? data.max : data.min,
-                            unit: data.unit || "%",
-                            deviationPercent: data.percent ?? 24,
-                            timestamp: data.timestamp || notif.createdAt,
-                          })
-                        }
-                        className="text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Investigate with AI RCA
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSelectedAlertForGraph({
+                              assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
+                              signalName: data.signal || "Operational Variable",
+                              severity: isHigh ? "Critical" : "Medium",
+                              observedValue: data.value,
+                              thresholdValue: isHigh ? data.max : data.min,
+                              minThreshold: data.min,
+                              maxThreshold: data.max,
+                              unit: data.unit || "%",
+                              deviationPercent: data.percent ?? 24,
+                              timestamp: data.timestamp || notif.createdAt,
+                              message: data.message,
+                            })
+                          }
+                          className="text-xs font-semibold gap-1.5 h-8 border-border hover:bg-muted"
+                        >
+                          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                          View Telemetry Graph
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setSelectedAlertForRca({
+                              assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
+                              signalName: data.signal || "Operational Variable",
+                              severity: isHigh ? "Critical" : "Medium",
+                              observedValue: data.value,
+                              thresholdValue: isHigh ? data.max : data.min,
+                              unit: data.unit || "%",
+                              deviationPercent: data.percent ?? 24,
+                              timestamp: data.timestamp || notif.createdAt,
+                            })
+                          }
+                          className="text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Investigate with AI RCA
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -489,6 +517,26 @@ export const NotificationList = () => {
         isOpen={!!selectedAlertForRca}
         onClose={() => setSelectedAlertForRca(null)}
         alert={selectedAlertForRca}
+      />
+
+      {/* Asset Telemetry Deviation Graph Modal */}
+      <AssetTelemetryGraphModal
+        isOpen={!!selectedAlertForGraph}
+        onClose={() => setSelectedAlertForGraph(null)}
+        alert={selectedAlertForGraph}
+        onOpenRca={(alertData) => {
+          setSelectedAlertForRca({
+            assetName: alertData.assetName,
+            signalName: alertData.signalName,
+            severity: alertData.severity,
+            observedValue: alertData.observedValue,
+            thresholdValue: alertData.thresholdValue,
+            unit: alertData.unit,
+            deviationPercent: alertData.deviationPercent,
+            timestamp: alertData.timestamp,
+            message: alertData.message,
+          });
+        }}
       />
     </div>
   );

@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
+import AssetTelemetryGraphModal, { type AssetTelemetryAlertData } from "@/components/AssetTelemetryGraphModal";
 
 interface NotificationDrawerProps {
   open: boolean;
@@ -39,6 +40,7 @@ interface NotificationDrawerProps {
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, onOpenChange }) => {
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
+  const [selectedAlertForGraph, setSelectedAlertForGraph] = useState<AssetTelemetryAlertData | null>(null);
   const [filter, setFilter] = useState<"all" | "alerts" | "resolved">("all");
 
   const fmt = (n: number | null | undefined) =>
@@ -288,12 +290,31 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                         </div>
                       </div>
 
-                      {/* Action Bar: Deep AI RCA Trigger */}
-                      <div className="mt-3 pl-2 pt-2 border-t border-border/50 flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
-                          <ShieldAlert className="w-3 h-3 text-rose-400" />
-                          Break hazard detected
-                        </span>
+                      {/* Action Bar: Telemetry Graph & Deep AI RCA Triggers */}
+                      <div className="mt-3 pl-2 pt-2 border-t border-border/50 flex items-center justify-between gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedAlertForGraph({
+                              assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
+                              signalName: data.signal || "Operational Variable",
+                              severity: isHigh ? "Critical" : "Medium",
+                              observedValue: data.value,
+                              thresholdValue: isHigh ? data.max : data.min,
+                              minThreshold: data.min,
+                              maxThreshold: data.max,
+                              unit: data.unit || "%",
+                              deviationPercent: data.percent ?? 24,
+                              timestamp: data.timestamp || notif.createdAt,
+                              message: data.message,
+                            });
+                          }}
+                          className="h-7 text-xs font-semibold gap-1 px-2 border-border/80 hover:bg-muted"
+                        >
+                          <Activity className="w-3 h-3 text-cyan-400" />
+                          View Graph
+                        </Button>
 
                         <Button
                           size="sm"
@@ -309,7 +330,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                               timestamp: data.timestamp || notif.createdAt,
                             });
                           }}
-                          className="h-7 text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                          className="h-7 text-xs font-bold gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm px-2.5"
                         >
                           <Sparkles className="w-3 h-3" />
                           AI RCA
@@ -380,6 +401,26 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
         isOpen={!!selectedAlertForRca}
         onClose={() => setSelectedAlertForRca(null)}
         alert={selectedAlertForRca}
+      />
+
+      {/* Asset Telemetry Deviation Graph Modal */}
+      <AssetTelemetryGraphModal
+        isOpen={!!selectedAlertForGraph}
+        onClose={() => setSelectedAlertForGraph(null)}
+        alert={selectedAlertForGraph}
+        onOpenRca={(alertData) => {
+          setSelectedAlertForRca({
+            assetName: alertData.assetName,
+            signalName: alertData.signalName,
+            severity: alertData.severity,
+            observedValue: alertData.observedValue,
+            thresholdValue: alertData.thresholdValue,
+            unit: alertData.unit,
+            deviationPercent: alertData.deviationPercent,
+            timestamp: alertData.timestamp,
+            message: alertData.message,
+          });
+        }}
       />
     </>
   );

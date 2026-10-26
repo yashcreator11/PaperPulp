@@ -20,6 +20,7 @@ import {
 import { useNotifications } from "@/context/NotificationContext";
 import { Button } from "@/components/ui/button";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
+import AssetTelemetryGraphModal, { type AssetTelemetryAlertData } from "@/components/AssetTelemetryGraphModal";
 
 interface DriftTag {
   tag: string;
@@ -40,6 +41,7 @@ export default function PaperMachineBreakPredictor({ showRoi = false }: { showRo
   const [leadTime, setLeadTime] = useState<number | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [selectedRcaAlert, setSelectedRcaAlert] = useState<AlertRcaData | null>(null);
+  const [selectedGraphAlert, setSelectedGraphAlert] = useState<AssetTelemetryAlertData | null>(null);
 
   // Trigger alert when user switches scenarios
   const handleSelectScenario = (targetScenario: "normal" | "draw_flutter" | "vacuum_sag" | "steam_sag") => {
@@ -440,33 +442,69 @@ export default function PaperMachineBreakPredictor({ showRoi = false }: { showRo
                   </span>
                 )}
 
-                <div className="mt-3 pt-2 border-t border-emerald-500/20 flex items-center justify-between">
+                <div className="mt-3 pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] text-emerald-400/90 font-medium">
                     Continuous Physics & Inverter Fault Tree Analysis Available
                   </span>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedRcaAlert({
-                        assetName: scenario === "steam_sag" ? "RECOVERY-BOILER-01" : "PM-01-PAPER-MACHINE",
-                        signalName:
-                          scenario === "draw_flutter"
-                            ? "Press 3-to-Dryer Draw Diff"
-                            : scenario === "vacuum_sag"
-                            ? "Suction Couch Roll Vacuum"
-                            : "Recovery Boiler Steam Output",
-                        severity: "Critical",
-                        observedValue: scenario === "draw_flutter" ? 2.85 : scenario === "vacuum_sag" ? -44.2 : 82.0,
-                        thresholdValue: scenario === "draw_flutter" ? 2.2 : scenario === "vacuum_sag" ? -55.0 : 95.0,
-                        unit: scenario === "draw_flutter" ? "%" : scenario === "vacuum_sag" ? "kPa" : "bar",
-                        deviationPercent: scenario === "draw_flutter" ? 24.8 : scenario === "vacuum_sag" ? -28.4 : -18.0,
-                        timestamp: new Date().toISOString(),
-                      });
-                    }}
-                    className="h-7 text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 shadow-md shadow-emerald-500/20"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> Launch Deep AI RCA Diagnosis
-                  </Button>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedGraphAlert({
+                          assetName: scenario === "steam_sag" ? "RECOVERY-BOILER-01" : "PM-01-PAPER-MACHINE",
+                          signalName:
+                            scenario === "draw_flutter"
+                              ? "Press 3-to-Dryer Draw Diff"
+                              : scenario === "vacuum_sag"
+                              ? "Suction Couch Roll Vacuum"
+                              : "Recovery Boiler Steam Output",
+                          severity: "Critical",
+                          observedValue: scenario === "draw_flutter" ? 2.85 : scenario === "vacuum_sag" ? -44.2 : 82.0,
+                          thresholdValue: scenario === "draw_flutter" ? 2.2 : scenario === "vacuum_sag" ? -55.0 : 95.0,
+                          minThreshold: scenario === "vacuum_sag" ? -65.0 : scenario === "steam_sag" ? 95.0 : 1.2,
+                          maxThreshold: scenario === "vacuum_sag" ? -55.0 : scenario === "steam_sag" ? 105.0 : 2.2,
+                          unit: scenario === "draw_flutter" ? "%" : scenario === "vacuum_sag" ? "kPa" : "bar",
+                          deviationPercent: scenario === "draw_flutter" ? 24.8 : scenario === "vacuum_sag" ? -28.4 : -18.0,
+                          timestamp: new Date().toISOString(),
+                          message:
+                            scenario === "draw_flutter"
+                              ? "Draw difference surged to 2.85% (+24.8% deviation). Impending open-draw sheet rupture."
+                              : scenario === "vacuum_sag"
+                              ? "Suction couch vacuum dropped to -44.2 kPa (-28.4% sag). Wet web collapse hazard."
+                              : "Recovery boiler steam pressure dropped to 82.0 bar (-18.0% drop). Thermal starvation.",
+                        });
+                      }}
+                      className="h-7 text-xs font-semibold gap-1.5 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-cyan-400" /> View Telemetry Graph
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedRcaAlert({
+                          assetName: scenario === "steam_sag" ? "RECOVERY-BOILER-01" : "PM-01-PAPER-MACHINE",
+                          signalName:
+                            scenario === "draw_flutter"
+                              ? "Press 3-to-Dryer Draw Diff"
+                              : scenario === "vacuum_sag"
+                              ? "Suction Couch Roll Vacuum"
+                              : "Recovery Boiler Steam Output",
+                          severity: "Critical",
+                          observedValue: scenario === "draw_flutter" ? 2.85 : scenario === "vacuum_sag" ? -44.2 : 82.0,
+                          thresholdValue: scenario === "draw_flutter" ? 2.2 : scenario === "vacuum_sag" ? -55.0 : 95.0,
+                          unit: scenario === "draw_flutter" ? "%" : scenario === "vacuum_sag" ? "kPa" : "bar",
+                          deviationPercent: scenario === "draw_flutter" ? 24.8 : scenario === "vacuum_sag" ? -28.4 : -18.0,
+                          timestamp: new Date().toISOString(),
+                        });
+                      }}
+                      className="h-7 text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 shadow-md shadow-emerald-500/20"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Launch Deep AI RCA Diagnosis
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -479,6 +517,26 @@ export default function PaperMachineBreakPredictor({ showRoi = false }: { showRo
         isOpen={!!selectedRcaAlert}
         onClose={() => setSelectedRcaAlert(null)}
         alert={selectedRcaAlert}
+      />
+
+      {/* Asset Telemetry Deviation Graph Modal */}
+      <AssetTelemetryGraphModal
+        isOpen={!!selectedGraphAlert}
+        onClose={() => setSelectedGraphAlert(null)}
+        alert={selectedGraphAlert}
+        onOpenRca={(alertData) => {
+          setSelectedRcaAlert({
+            assetName: alertData.assetName,
+            signalName: alertData.signalName,
+            severity: alertData.severity,
+            observedValue: alertData.observedValue,
+            thresholdValue: alertData.thresholdValue,
+            unit: alertData.unit,
+            deviationPercent: alertData.deviationPercent,
+            timestamp: alertData.timestamp,
+            message: alertData.message,
+          });
+        }}
       />
 
       {/* Optional In-line ROI Calculator (if showRoi=true) */}

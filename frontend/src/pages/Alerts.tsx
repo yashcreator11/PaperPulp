@@ -15,6 +15,7 @@ import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
 import { useParams } from "react-router-dom";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
+import AssetTelemetryGraphModal, { type AssetTelemetryAlertData } from "@/components/AssetTelemetryGraphModal";
 
 
 
@@ -85,6 +86,7 @@ const getSeverity = (percent: number) => {
 export default function AlertsAnalyticsPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [selectedAlertForRca, setSelectedAlertForRca] = useState<AlertRcaData | null>(null);
+  const [selectedAlertForGraph, setSelectedAlertForGraph] = useState<AssetTelemetryAlertData | null>(null);
   const [signalFilter, setSignalFilter] = useState("ALL");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [deviationRange, setDeviationRange] = useState([0, 1000]);
@@ -494,25 +496,50 @@ const [fromUtc, toUtc] = useMemo(() => {
                       : "Within Range"}
                   </p>
 
-                  <Button
-                    size="sm"
-                    className="w-full text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
-                    onClick={() =>
-                      setSelectedAlertForRca({
-                        alertId: a.alertId,
-                        assetName: a.assetName,
-                        signalName: a.signalName,
-                        severity: a.severity,
-                        observedValue: a.maxObservedValue ?? a.minObservedValue,
-                        thresholdValue: a.maxThreshold ?? a.minThreshold,
-                        deviationPercent: a.deviationPercent,
-                        timestamp: a.alertStartUtc,
-                      })
-                    }
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Investigate with AI RCA
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-xs font-semibold gap-1.5 h-8 border-gray-300 hover:bg-gray-100 text-gray-700"
+                      onClick={() =>
+                        setSelectedAlertForGraph({
+                          alertId: a.alertId,
+                          assetName: a.assetName,
+                          signalName: a.signalName,
+                          severity: a.severity,
+                          observedValue: a.maxObservedValue ?? a.minObservedValue,
+                          thresholdValue: a.maxThreshold ?? a.minThreshold,
+                          minThreshold: a.minThreshold,
+                          maxThreshold: a.maxThreshold,
+                          deviationPercent: a.deviationPercent,
+                          timestamp: a.alertStartUtc,
+                        })
+                      }
+                    >
+                      <Activity className="w-3.5 h-3.5 text-blue-600" />
+                      View Graph
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      className="flex-1 text-xs font-bold gap-1.5 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                      onClick={() =>
+                        setSelectedAlertForRca({
+                          alertId: a.alertId,
+                          assetName: a.assetName,
+                          signalName: a.signalName,
+                          severity: a.severity,
+                          observedValue: a.maxObservedValue ?? a.minObservedValue,
+                          thresholdValue: a.maxThreshold ?? a.minThreshold,
+                          deviationPercent: a.deviationPercent,
+                          timestamp: a.alertStartUtc,
+                        })
+                      }
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      AI RCA
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -573,6 +600,26 @@ const [fromUtc, toUtc] = useMemo(() => {
         isOpen={!!selectedAlertForRca}
         onClose={() => setSelectedAlertForRca(null)}
         alert={selectedAlertForRca}
+      />
+
+      {/* Asset Telemetry Deviation Graph Modal */}
+      <AssetTelemetryGraphModal
+        isOpen={!!selectedAlertForGraph}
+        onClose={() => setSelectedAlertForGraph(null)}
+        alert={selectedAlertForGraph}
+        onOpenRca={(alertData) => {
+          setSelectedAlertForRca({
+            alertId: alertData.alertId,
+            assetName: alertData.assetName,
+            signalName: alertData.signalName,
+            severity: alertData.severity,
+            observedValue: alertData.observedValue,
+            thresholdValue: alertData.thresholdValue,
+            deviationPercent: alertData.deviationPercent,
+            timestamp: alertData.timestamp,
+            message: alertData.message,
+          });
+        }}
       />
     </div>
   );
