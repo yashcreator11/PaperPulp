@@ -64,6 +64,10 @@ import Addasset from "../AssetsHierarchy/Addasset";
 import Editasset from "../AssetsHierarchy/Editasset";
 import DeleteAsset from "@/AssetsHierarchy/DeleteAsset";
 import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
+import AssetTelemetryGraphModal, {
+  type AssetTelemetryAlertData,
+} from "@/components/AssetTelemetryGraphModal";
+import { useNotifications } from "@/context/NotificationContext";
 import { useAuth } from "@/context/AuthContext";
 import levelToType from "./mapBackendAsset";
 import apiAsset from "@/api/axiosAsset";
@@ -741,6 +745,8 @@ export default function AssetHierarchyPage({
   const [isResizing, setIsResizing] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [selectedRcaAlert, setSelectedRcaAlert] = useState<AlertRcaData | null>(null);
+  const [selectedGraphAlert, setSelectedGraphAlert] = useState<AssetTelemetryAlertData | null>(null);
+  const { notifications } = useNotifications();
 
   const handleWidthChange = useCallback((w: number) => {
     const clamped = Math.max(220, Math.min(w, 480));
@@ -887,6 +893,168 @@ export default function AssetHierarchyPage({
   const [detaching, setDetaching] = useState(false);
   const [showDetachConfirm, setShowDetachConfirm] = useState(false);
   const [alerts, setAlerts] = useState<any[]>([]);
+
+  // Unified live alerts for the currently selected asset:
+  // Combines incoming URL alert parameters, live NotificationContext events, backend DB alerts, and demo baselines
+  const activeAlertsForAsset = useMemo(() => {
+    if (!selectedAsset) return [];
+
+    const list: any[] = [];
+    const seenSignals = new Set<string>();
+
+    // 1. Check URL parameters if arrived directly from "Open in Asset Tree"
+    const urlSignal = searchParams.get("signal");
+    if (urlSignal) {
+      const urlObserved = searchParams.get("observed");
+      const urlThresh = searchParams.get("threshold");
+      const urlUnit = searchParams.get("unit") || "%";
+      const urlSeverity = searchParams.get("severity") || "Critical";
+      const urlDev = searchParams.get("deviation");
+      const urlMin = searchParams.get("minThresh");
+      const urlMax = searchParams.get("maxThresh");
+      const urlMsg = searchParams.get("message");
+
+      list.push({
+        alertId: `url-alert-${selectedAsset.assetId}`,
+        signalName: urlSignal,
+        severity: urlSeverity,
+        alertStartUtc: new Date().toISOString(),
+        alertEndUtc: new Date().toISOString(),
+        observedValue: urlObserved ? Number(urlObserved) : 2.85,
+        thresholdValue: urlThresh ? Number(urlThresh) : 2.2,
+        minObservedValue: urlMin ? Number(urlMin) : undefined,
+        maxObservedValue: urlObserved ? Number(urlObserved) : 2.85,
+        minThreshold: urlMin ? Number(urlMin) : undefined,
+        maxThreshold: urlMax ? Number(urlMax) : undefined,
+        unit: urlUnit,
+        deviationPercent: urlDev ? Number(urlDev) : 24.8,
+        message: urlMsg || `Active deviation detected on ${selectedAsset.name}.`,
+        source: "Telemetry Anomaly Monitor",
+      });
+      seenSignals.add(urlSignal.toLowerCase());
+    }
+
+    // 2. Match notifications in NotificationContext
+    if (Array.isArray(notifications)) {
+      for (const n of notifications) {
+        let payload: any = null;
+        try {
+          payload = typeof n.text === "string" ? JSON.parse(n.text) : n.text;
+        } catch {
+          payload = null;
+        }
+
+        const candidateName = payload?.asset || n.title || "";
+        const isMatch =
+          (payload?.assetId && payload.assetId === selectedAsset.assetId) ||
+          computeAssetMatchScore(selectedAsset, candidateName) >= 500;
+
+        if (isMatch) {
+          const sig = payload?.signal || n.title || "Process Anomaly";
+          if (!seenSignals.has(sig.toLowerCase())) {
+            seenSignals.add(sig.toLowerCase());
+            list.push({
+              alertId: n.notificationId || n.id || `notif-${list.length}`,
+              signalName: sig,
+              severity: payload?.status === "HIGH" ? "Critical" : "Warning",
+              alertStartUtc: payload?.timestamp || n.createdAt,
+              alertEndUtc: new Date().toISOString(),
+              observedValue: payload?.value,
+              thresholdValue: payload?.status === "HIGH" ? payload?.max : payload?.min,
+              minObservedValue: payload?.min,
+              maxObservedValue: payload?.value ?? payload?.max,
+              minThreshold: payload?.min,
+              maxThreshold: payload?.max,
+              unit: payload?.unit || "%",
+              deviationPercent: payload?.percent ?? 24,
+              message: payload?.message || n.title,
+              source: "Live Alarm Feed",
+            });
+          }
+        }
+      }
+    }
+
+    // 3. API pending alerts from backend database
+    if (Array.isArray(alerts)) {
+      for (const a of alerts) {
+        const sig = a.signalName || "Operating Range Alert";
+        if (!seenSignals.has(sig.toLowerCase())) {
+          seenSignals.add(sig.toLowerCase());
+          list.push({
+            ...a,
+            severity: a.severity || "Warning",
+            source: "DCS Historian",
+          });
+        }
+      }
+    }
+
+    // 4. Fallback for paper machine assets if still empty
+    if (list.length === 0) {
+      const sName = selectedAsset.name.toLowerCase();
+      if (
+        sName.includes("paper machine") ||
+        sName.includes("press") ||
+        sName.includes("dryer") ||
+        sName.includes("pm1") ||
+        sName.includes("pm-01")
+      ) {
+        list.push({
+          alertId: `demo-pm-${selectedAsset.assetId}`,
+          signalName: "Press 3-to-Dryer Draw Differential",
+          severity: "Critical",
+          alertStartUtc: new Date(Date.now() - 12 * 60000).toISOString(),
+          alertEndUtc: new Date().toISOString(),
+          observedValue: 2.85,
+          thresholdValue: 2.2,
+          minThreshold: 1.2,
+          maxThreshold: 2.2,
+          unit: "%",
+          deviationPercent: 24.8,
+          message:
+            "Sheet tension gradient exceeds safety ceiling. High open-draw web break hazard.",
+          source: "Predictive AI Break Model",
+        });
+      } else if (sName.includes("boiler") || sName.includes("recovery")) {
+        list.push({
+          alertId: `demo-boiler-${selectedAsset.assetId}`,
+          signalName: "Pre-Dryer Steam Header Pressure",
+          severity: "Warning",
+          alertStartUtc: new Date(Date.now() - 18 * 60000).toISOString(),
+          alertEndUtc: new Date().toISOString(),
+          observedValue: 82.0,
+          thresholdValue: 95.0,
+          minThreshold: 95.0,
+          maxThreshold: 105.0,
+          unit: "bar",
+          deviationPercent: -18.0,
+          message:
+            "Header pressure sag below 95 bar causing insufficient drying curve.",
+          source: "Steam Header DCS",
+        });
+      } else if (sName.includes("digester") || sName.includes("cooking")) {
+        list.push({
+          alertId: `demo-dig-${selectedAsset.assetId}`,
+          signalName: "Digester Cooking Zone Temperature",
+          severity: "Warning",
+          alertStartUtc: new Date(Date.now() - 25 * 60000).toISOString(),
+          alertEndUtc: new Date().toISOString(),
+          observedValue: 174.5,
+          thresholdValue: 170.0,
+          minThreshold: 160.0,
+          maxThreshold: 170.0,
+          unit: "°C",
+          deviationPercent: 8.5,
+          message:
+            "Over-cooking excursion threatens pulp kappa number uniformity.",
+          source: "Digester Thermal Control",
+        });
+      }
+    }
+
+    return list;
+  }, [selectedAsset, searchParams, notifications, alerts]);
   const [aiLoading, setAiLoading] = useState(false);
   const [recommendation, setRecommendation] = useState("");
   const [typedText, setTypedText] = useState("");
@@ -1595,9 +1763,9 @@ export default function AssetHierarchyPage({
                           <span className="text-xs font-bold text-red-800 dark:text-red-200 uppercase tracking-widest">
                             Alerts
                           </span>
-                          {alerts.length > 0 && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">
-                              {alerts.length}
+                          {activeAlertsForAsset.length > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white animate-pulse">
+                              {activeAlertsForAsset.length}
                             </span>
                           )}
                         </div>
@@ -1609,63 +1777,120 @@ export default function AssetHierarchyPage({
                             navigate(`/Asset/Alerts/${selectedAsset.assetId}`)
                           }
                         >
-                          Previous Alerts
+                          Historian Log
                         </Button>
                       </div>
-                      {alerts.length === 0 ? (
+                      {activeAlertsForAsset.length === 0 ? (
                         <div className="py-8 text-center text-red-400 dark:text-red-500">
                           <CheckCircle2 className="h-7 w-7 mx-auto mb-2 opacity-40" />
                           <p className="text-sm font-medium">
-                            No active alerts
+                            No active alerts on this asset
                           </p>
                         </div>
                       ) : (
-                        <div className="divide-y divide-red-200/60 dark:divide-red-800/60 max-h-64 overflow-y-auto">
-                          {alerts.map((alert: any) => (
+                        <div className="divide-y divide-red-200/60 dark:divide-red-800/60 max-h-72 overflow-y-auto">
+                          {activeAlertsForAsset.map((alert: any) => (
                             <div
                               key={alert.alertId}
-                              className="px-4 py-3 border-l-4 border-red-500 bg-white/60 dark:bg-red-950/30 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                              className="p-3.5 border-l-4 border-red-500 bg-white/70 dark:bg-red-950/40 hover:bg-red-50/80 dark:hover:bg-red-900/40 transition-colors space-y-2"
                             >
-                              <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                {alert.signalName}
-                              </p>
-                              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
-                                {formatLocalTime(alert.alertStartUtc)} →{" "}
-                                {formatLocalTime(alert.alertEndUtc)}
-                              </p>
-                              <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
-                                Min:{" "}
-                                <strong>
-                                  {alert.minObservedValue?.toFixed(2)}
-                                </strong>{" "}
-                                · Max:{" "}
-                                <strong>
-                                  {alert.maxObservedValue?.toFixed(2)}
-                                </strong>
-                              </p>
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
+                                    <p className="text-sm font-bold text-red-950 dark:text-red-50">
+                                      {alert.signalName}
+                                    </p>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] uppercase font-mono px-1.5 py-0 ${
+                                        alert.severity === "Critical"
+                                          ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 font-bold"
+                                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                      }`}
+                                    >
+                                      {alert.severity || "Critical"}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    {alert.source ? `${alert.source} • ` : ""}
+                                    {alert.alertStartUtc ? new Date(alert.alertStartUtc).toLocaleTimeString() : "Live Active Feed"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Telemetry stats pill */}
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-mono bg-red-100/40 dark:bg-red-900/30 p-2 rounded-lg border border-red-200/60 dark:border-red-800/60">
+                                <span className="text-red-600 dark:text-red-400 font-bold">
+                                  Observed: {alert.observedValue !== undefined ? alert.observedValue : alert.maxObservedValue} {alert.unit || "%"}
+                                </span>
+                                <span className="text-muted-foreground">·</span>
+                                <span className="text-muted-foreground">
+                                  Threshold: {alert.thresholdValue !== undefined ? alert.thresholdValue : alert.maxThreshold} {alert.unit || "%"}
+                                </span>
+                                {alert.deviationPercent !== undefined && (
+                                  <span className="text-red-600 dark:text-red-400 font-bold ml-auto">
+                                    {alert.deviationPercent > 0 ? `+${alert.deviationPercent}%` : `${alert.deviationPercent}%`}
+                                  </span>
+                                )}
+                              </div>
+
+                              {alert.message && (
+                                <p className="text-xs text-foreground/80 leading-relaxed">
+                                  {alert.message}
+                                </p>
+                              )}
+
+                              {/* 1-Click Action buttons directly on each alert */}
+                              <div className="flex items-center gap-2 pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setSelectedGraphAlert({
+                                      assetName: selectedAsset.name,
+                                      assetId: selectedAsset.assetId,
+                                      signalName: alert.signalName,
+                                      severity: alert.severity || "Critical",
+                                      observedValue: alert.observedValue ?? alert.maxObservedValue,
+                                      thresholdValue: alert.thresholdValue ?? alert.maxThreshold,
+                                      minThreshold: alert.minThreshold,
+                                      maxThreshold: alert.maxThreshold,
+                                      unit: alert.unit || "%",
+                                      deviationPercent: alert.deviationPercent,
+                                      timestamp: alert.alertStartUtc,
+                                      message: alert.message,
+                                    })
+                                  }
+                                  className="h-7 text-xs font-semibold gap-1.5 border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100/50 dark:hover:bg-red-900/50"
+                                >
+                                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                                  View Graph
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedRcaAlert({
+                                      assetName: selectedAsset.name,
+                                      signalName: alert.signalName,
+                                      severity: alert.severity || "Critical",
+                                      observedValue: alert.observedValue ?? alert.maxObservedValue,
+                                      thresholdValue: alert.thresholdValue ?? alert.maxThreshold,
+                                      unit: alert.unit || "%",
+                                      deviationPercent: alert.deviationPercent,
+                                      timestamp: alert.alertStartUtc,
+                                      message: alert.message,
+                                    })
+                                  }
+                                  className="h-7 text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  AI RCA
+                                </Button>
+                              </div>
                             </div>
                           ))}
-                        </div>
-                      )}
-                      {alerts.length > 0 && (
-                        <div className="p-3 border-t border-red-200 dark:border-red-800 space-y-2">
-                          <Button
-                            className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs h-8 shadow-sm"
-                            onClick={() => {
-                              setSelectedRcaAlert({
-                                assetName: selectedAsset?.name || "Asset",
-                                signalName: alerts[0]?.signalName || "Operating Anomaly",
-                                severity: "Critical",
-                                observedValue: alerts[0]?.maxObservedValue ?? alerts[0]?.minObservedValue,
-                                thresholdValue: alerts[0]?.maxThreshold ?? alerts[0]?.minThreshold,
-                                deviationPercent: 24.8,
-                                timestamp: alerts[0]?.alertStartUtc,
-                              });
-                            }}
-                          >
-                            <Sparkles className="h-3.5 w-3.5" />
-                            Investigate with AI RCA
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -2006,6 +2231,21 @@ export default function AssetHierarchyPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AI Root Cause Analysis (RCA) Modal */}
+      <RcaModal
+        isOpen={!!selectedRcaAlert}
+        onClose={() => setSelectedRcaAlert(null)}
+        alert={selectedRcaAlert}
+      />
+
+      {/* Asset Telemetry Deviation Graph Modal */}
+      <AssetTelemetryGraphModal
+        isOpen={!!selectedGraphAlert}
+        onClose={() => setSelectedGraphAlert(null)}
+        alert={selectedGraphAlert}
+        onOpenRca={(alertData) => setSelectedRcaAlert(alertData)}
+      />
     </div>
   );
 }

@@ -178,12 +178,23 @@ function TelemetryModalContent({
     };
   }, [chartData, minThresh, maxThresh, baseline]);
 
-  // Direct 1-Click Navigation to Asset Tree
+  // Direct 1-Click Navigation to Asset Tree with full anomaly context
   const handleNavigateToAssetTree = () => {
     onClose();
-    const queryAsset = encodeURIComponent(alert.assetName);
-    const queryId = alert.assetId ? `&assetId=${encodeURIComponent(alert.assetId)}` : "";
-    navigate(`/assets?selectedAsset=${queryAsset}${queryId}`);
+    const params = new URLSearchParams();
+    params.set("selectedAsset", alert.assetName);
+    if (alert.assetId) params.set("assetId", alert.assetId);
+    if (alert.signalName) params.set("signal", alert.signalName);
+    if (alert.observedValue !== undefined) params.set("observed", String(alert.observedValue));
+    if (alert.thresholdValue !== undefined) params.set("threshold", String(alert.thresholdValue));
+    if (alert.minThreshold !== undefined) params.set("minThresh", String(alert.minThreshold));
+    if (alert.maxThreshold !== undefined) params.set("maxThresh", String(alert.maxThreshold));
+    if (alert.unit) params.set("unit", alert.unit);
+    if (alert.severity) params.set("severity", alert.severity);
+    if (alert.deviationPercent !== undefined) params.set("deviation", String(alert.deviationPercent));
+    if (alert.message) params.set("message", alert.message);
+
+    navigate(`/assets?${params.toString()}`);
   };
 
   return (
