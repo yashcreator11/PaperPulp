@@ -1579,10 +1579,7 @@ export default function AssetHierarchyPage({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                  Asset Tree
-                </span>
-                <span className="text-[10px] text-muted-foreground/60 font-mono">
-                  ({treeWidth}px)
+                  Asset Hierarchy
                 </span>
               </div>
               <div className="flex items-center gap-0.5">
@@ -1609,7 +1606,7 @@ export default function AssetHierarchyPage({
                   size="sm"
                   className="h-6 px-1.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/70"
                   onClick={toggleExpandTree}
-                  title={treeWidth > 380 ? "Shrink Tree Width (280px)" : "Expand Tree Width (520px)"}
+                  title={treeWidth > 380 ? "Collapse panel width" : "Expand panel width"}
                 >
                   {treeWidth > 380 ? "◀" : "▶"}
                 </Button>
