@@ -53,15 +53,141 @@ export const useNotifications = () => {
   return ctx;
 };
 
+const NOTIFS_STORAGE_KEY = "paperpulp_notifications_store_v1";
+
+const DEFAULT_SEEDED_NOTIFICATIONS: UserNotification[] = [
+  {
+    recipientId: "seed-pm1-break",
+    notificationId: "seed-notif-pm1",
+    title: "🚨 CRITICAL ALERT: PM-01-PAPER-MACHINE",
+    text: JSON.stringify({
+      asset: "PM-01-PAPER-MACHINE",
+      assetId: "ast-mac-pm1",
+      signal: "Press 3-to-Dryer Draw Diff",
+      status: "HIGH",
+      value: 2.85,
+      min: 1.2,
+      max: 2.2,
+      unit: "%",
+      percent: 24.8,
+      timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
+      message: "Sheet tension gradient exceeds safety ceiling. High open-draw web break hazard.",
+    }),
+    isRead: false,
+    isAcknowledged: false,
+    createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
+    readAt: null,
+    acknowledgedAt: null,
+  },
+  {
+    recipientId: "seed-boiler-press",
+    notificationId: "seed-notif-boiler",
+    title: "⚠️ PROCESS ALARM: RECOVERY-BOILER-01",
+    text: JSON.stringify({
+      asset: "RECOVERY-BOILER-01",
+      assetId: "ast-mac-recb",
+      signal: "Pre-Dryer Steam Header Pressure",
+      status: "LOW",
+      value: 82.0,
+      min: 95.0,
+      max: 105.0,
+      unit: "bar",
+      percent: -18.0,
+      timestamp: new Date(Date.now() - 28 * 60000).toISOString(),
+      message: "Header pressure sag below 95 bar causing insufficient drying curve.",
+    }),
+    isRead: false,
+    isAcknowledged: false,
+    createdAt: new Date(Date.now() - 28 * 60000).toISOString(),
+    readAt: null,
+    acknowledgedAt: null,
+  },
+  {
+    recipientId: "seed-digester-temp",
+    notificationId: "seed-notif-digester",
+    title: "⚠️ PROCESS ALARM: CONTINUOUS-DIGESTER-01",
+    text: JSON.stringify({
+      asset: "CONTINUOUS-DIGESTER-01",
+      assetId: "ast-mac-dig",
+      signal: "Digester Cooking Zone Temperature",
+      status: "HIGH",
+      value: 174.5,
+      min: 160.0,
+      max: 170.0,
+      unit: "°C",
+      percent: 8.5,
+      timestamp: new Date(Date.now() - 45 * 60000).toISOString(),
+      message: "Over-cooking excursion threatens pulp kappa number uniformity.",
+    }),
+    isRead: true,
+    isAcknowledged: true,
+    createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
+    readAt: new Date(Date.now() - 40 * 60000).toISOString(),
+    acknowledgedAt: new Date(Date.now() - 40 * 60000).toISOString(),
+  },
+  {
+    recipientId: "seed-headbox-cons",
+    notificationId: "seed-notif-headbox",
+    title: "⚠️ PROCESS ALARM: HEADBOX-SYSTEM",
+    text: JSON.stringify({
+      asset: "Paper Machine #1 Train (Step 15)",
+      assetId: "ast-mac-pm1",
+      signal: "Stock Consistency Sensor",
+      status: "LOW",
+      value: 0.68,
+      min: 0.72,
+      max: 0.85,
+      unit: "%",
+      percent: -12.4,
+      timestamp: new Date(Date.now() - 75 * 60000).toISOString(),
+      message: "Headbox thin stock consistency dropped below specification window.",
+    }),
+    isRead: false,
+    isAcknowledged: false,
+    createdAt: new Date(Date.now() - 75 * 60000).toISOString(),
+    readAt: null,
+    acknowledgedAt: null,
+  },
+];
+
+const getStoredNotifications = (): UserNotification[] => {
+  try {
+    const raw = localStorage.getItem(NOTIFS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_SEEDED_NOTIFICATIONS;
+};
+
+const saveStoredNotifications = (items: UserNotification[]) => {
+  try {
+    localStorage.setItem(NOTIFS_STORAGE_KEY, JSON.stringify(items.slice(0, 80)));
+  } catch {}
+};
+
+const filterListByTab = (list: NotificationType[], tab: "all" | "unread" | "read") => {
+  if (tab === "unread") return list.filter(n => !n.isRead);
+  if (tab === "read") return list.filter(n => n.isRead);
+  return list;
+};
+
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [rendered, setRendered] = useState<NotificationType[]>([]);
+  const [rendered, setRendered] = useState<NotificationType[]>(() => {
+    const initial = getStoredNotifications();
+    return filterListByTab(initial, "all");
+  });
   const [prefetch, setPrefetch] = useState<NotificationType[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(() => {
+    const initial = getStoredNotifications();
+    return initial.filter(n => !n.isRead).length;
+  });
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread" | "read">("all");
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
 
   const PAGE_SIZE = 10;
 
@@ -82,7 +208,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setLoading(true);
     try {
       const first = await fetchPage(null);
-      setRendered(first?.data ?? []);
+      const apiData = first?.data ?? [];
+      if (apiData.length > 0) {
+        setRendered(apiData);
+        const local = getStoredNotifications();
+        const merged = [...apiData];
+        for (const loc of local) {
+          if (!merged.some(m => m.notificationId === loc.notificationId || m.recipientId === loc.recipientId)) {
+            merged.push(loc);
+          }
+        }
+        saveStoredNotifications(merged);
+        setUnreadCount(merged.filter(n => !n.isRead).length);
+      } else {
+        const stored = getStoredNotifications();
+        saveStoredNotifications(stored);
+        setRendered(filterListByTab(stored, activeTab));
+        setUnreadCount(stored.filter(n => !n.isRead).length);
+      }
 
       if (first?.hasMore) {
         const second = await fetchPage(first.nextCursor);
@@ -93,18 +236,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setHasMore(false);
         setPrefetch([]);
       }
-
-      // Always get unread count
-      try {
-        const unreadRes = await getMyNotifications({ unread: true, limit: 50 });
-        setUnreadCount(unreadRes?.data?.length ?? 0);
-      } catch {
-        setUnreadCount(0);
-      }
     } catch {
-      // Seamless offline mode for notifications
-      setRendered([]);
-      setUnreadCount(0);
+      // Backend offline: restore seamlessly from localStorage
+      const stored = getStoredNotifications();
+      saveStoredNotifications(stored);
+      setRendered(filterListByTab(stored, activeTab));
+      setUnreadCount(stored.filter(n => !n.isRead).length);
+      setHasMore(false);
+      setPrefetch([]);
     } finally {
       setLoading(false);
     }
@@ -117,10 +256,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!hasMore || loading) return;
     setLoading(true);
     try {
-      // Render prefetched items immediately
       setRendered(prev => [...prev, ...prefetch]);
 
-      // Prefetch next page
       if (nextCursor) {
         const next = await fetchPage(nextCursor);
         setPrefetch(next.data);
@@ -141,10 +278,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
    * RELOAD WHEN TAB CHANGES
   -------------------------------------------------------- */
   useEffect(() => {
-    setRendered([]);
+    const stored = getStoredNotifications();
+    setRendered(filterListByTab(stored, activeTab));
+    setUnreadCount(stored.filter(n => !n.isRead).length);
     setPrefetch([]);
     setNextCursor(null);
-    setHasMore(true);
     loadInitial();
   }, [activeTab]);
 
@@ -184,10 +322,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           draggable: true,
         });
 
-        setUnreadCount(prev => prev + 1);
+        // Persist to localStorage
+        const stored = getStoredNotifications();
+        const updated = [notif, ...stored.filter(s => s.notificationId !== notif.notificationId && s.recipientId !== notif.recipientId)];
+        saveStoredNotifications(updated);
 
-        // Only add to list if tab is not "read"
-        if (activeTab !== "read") setRendered(prev => [notif, ...prev]);
+        setUnreadCount(updated.filter(n => !n.isRead).length);
+
+        if (activeTab !== "read") {
+          setRendered(prev => [notif, ...prev]);
+        }
       });
     } catch {
       // Hub initialization skipped if offline
@@ -202,18 +346,52 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
    * MARK SINGLE NOTIFICATION READ
   =================================================== */
   const markRead = async (id: string) => {
-    await markNotificationAsRead(id);
-    setUnreadCount(prev => Math.max(prev - 1, 0));
-    loadInitial(); // reload current tab
+    try {
+      await markNotificationAsRead(id);
+    } catch {}
+
+    const stored = getStoredNotifications();
+    const updated = stored.map(n =>
+      (n.notificationId === id || n.recipientId === id)
+        ? { ...n, isRead: true, readAt: new Date().toISOString() }
+        : n
+    );
+    saveStoredNotifications(updated);
+
+    setRendered(prev =>
+      activeTab === "unread"
+        ? prev.filter(n => n.notificationId !== id && n.recipientId !== id)
+        : prev.map(n =>
+            (n.notificationId === id || n.recipientId === id)
+              ? { ...n, isRead: true, readAt: new Date().toISOString() }
+              : n
+          )
+    );
+    setUnreadCount(updated.filter(n => !n.isRead).length);
   };
 
   /** ===================================================
    * MARK ALL NOTIFICATIONS READ
   =================================================== */
   const markAllRead = async () => {
-    await markAllNotificationsAsRead();
+    try {
+      await markAllNotificationsAsRead();
+    } catch {}
+
+    const stored = getStoredNotifications();
+    const updated = stored.map(n => ({
+      ...n,
+      isRead: true,
+      readAt: n.readAt || new Date().toISOString(),
+    }));
+    saveStoredNotifications(updated);
+
     setUnreadCount(0);
-    setActiveTab("read");
+    if (activeTab === "unread") {
+      setRendered([]);
+    } else {
+      setRendered(updated);
+    }
   };
 
   /** --------------------------------------------------------
@@ -286,7 +464,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
     }
 
-    // 4. Save into in-memory/rendered notifications list
+    // 4. Save into in-memory and persistent localStorage store
     const newNotif: UserNotification = {
       recipientId: "sim-" + Date.now(),
       notificationId: "notif-" + Date.now(),
@@ -299,7 +477,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       acknowledgedAt: null,
     };
 
-    setRendered(prev => [newNotif, ...prev]);
+    const stored = getStoredNotifications();
+    const updated = [newNotif, ...stored.filter(s => s.notificationId !== newNotif.notificationId && s.recipientId !== newNotif.recipientId)];
+    saveStoredNotifications(updated);
+
+    if (activeTab !== "read") {
+      setRendered(prev => [newNotif, ...prev]);
+    }
     if (options.status !== "NORMAL") {
       setUnreadCount(prev => prev + 1);
     }
