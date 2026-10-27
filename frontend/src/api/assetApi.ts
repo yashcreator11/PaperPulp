@@ -67,16 +67,16 @@ export interface CreateMappingRegister {
   registerId: string;
   signalName: string;
   unit: string;
-  minThreshold: number;
-  maxThreshold: number;
+  minThreshold: number | null;
+  maxThreshold: number | null;
 }
 
 export interface CreateMappingOpcUaNode {
   opcUaNodeId: string;
   signalName: string;
   unit: string;
-  minThreshold: number;
-  maxThreshold: number;
+  minThreshold: number | null;
+  maxThreshold: number | null;
 }
 
 export interface CreateMappingPayload {

@@ -954,7 +954,7 @@ export default function AssetHierarchyPage({
           if (!seenSignals.has(sig.toLowerCase())) {
             seenSignals.add(sig.toLowerCase());
             list.push({
-              alertId: n.notificationId || n.id || `notif-${list.length}`,
+              alertId: n.notificationId || (n as any).id || `notif-${list.length}`,
               signalName: sig,
               severity: payload?.status === "HIGH" ? "Critical" : "Warning",
               alertStartUtc: payload?.timestamp || n.createdAt,
@@ -1109,7 +1109,7 @@ export default function AssetHierarchyPage({
         uniqueIds.map(async (id) => {
           try {
             const res = await getDeviceById(id as string);
-            return res?.name ?? res?.data?.name ?? "Unknown Device";
+            return res?.name ?? (res as any)?.data?.name ?? "Unknown Device";
           } catch {
             return "Unknown Device";
           }
@@ -1174,7 +1174,7 @@ export default function AssetHierarchyPage({
     try {
       if (isBackendOfflineRef.current) {
         setDevices(MOCK_DEVICES as any);
-        const mockMap = Object.values(MOCK_MAPPINGS).flat() as ExistingMapping[];
+        const mockMap = Object.values(MOCK_MAPPINGS).flat() as unknown as ExistingMapping[];
         setExistingMappings(
           mockMap.filter((m) => m.assetId === selectedAsset.assetId),
         );
@@ -1200,7 +1200,7 @@ export default function AssetHierarchyPage({
       );
     } catch {
       setDevices(MOCK_DEVICES as any);
-      const mockMap = Object.values(MOCK_MAPPINGS).flat() as ExistingMapping[];
+      const mockMap = Object.values(MOCK_MAPPINGS).flat() as unknown as ExistingMapping[];
       setExistingMappings(
         mockMap.filter((m) => m.assetId === selectedAsset.assetId),
       );
