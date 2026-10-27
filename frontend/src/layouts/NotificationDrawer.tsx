@@ -296,6 +296,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                           variant="outline"
                           size="sm"
                           onClick={() => {
+                            onOpenChange(false);
                             setSelectedAlertForGraph({
                               assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
                               signalName: data.signal || "Operational Variable",
@@ -319,6 +320,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                         <Button
                           size="sm"
                           onClick={() => {
+                            onOpenChange(false);
                             setSelectedAlertForRca({
                               assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
                               signalName: data.signal || "Operational Variable",
