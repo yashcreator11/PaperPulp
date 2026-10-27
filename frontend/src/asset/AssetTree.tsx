@@ -179,6 +179,143 @@ function buildBreadcrumb(assets: BackendAsset[], targetId: string): string[] {
   return path;
 }
 
+// ─────────────────────────── Hierarchy Match & Lineage ───────────────────────
+
+interface FoundHierarchyMatch {
+  node: BackendAsset;
+  ancestors: BackendAsset[];
+  score: number;
+}
+
+const normalizeStr = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]/g, " ").trim();
+
+function computeAssetMatchScore(node: BackendAsset, rawTarget: string): number {
+  if (!rawTarget) return 0;
+  const target = rawTarget.trim().toLowerCase();
+  const nodeName = node.name.trim().toLowerCase();
+  const nodeId = node.assetId.trim().toLowerCase();
+
+  // 1. Exact match on ID or Name
+  if (nodeId === target || nodeName === target) return 1000;
+
+  // 2. Exact match in parentheses (e.g. "(FL-DIG-V01)" vs "FL-DIG-V01")
+  if (nodeName.includes(`(${target})`) || nodeName.includes(`[${target}]`)) return 950;
+
+  // 3. Normalized direct containment
+  const normTarget = normalizeStr(target);
+  const normName = normalizeStr(node.name);
+  if (normName === normTarget) return 920;
+  if (normName.includes(normTarget) || normTarget.includes(normName)) return 850;
+
+  // 4. Compact alphanumeric match (e.g. "pmpm1p01" vs "pm01presssection")
+  const compactTarget = target.replace(/[^a-z0-9]/g, "");
+  const compactName = nodeName.replace(/[^a-z0-9]/g, "");
+  if (compactName.includes(compactTarget) || compactTarget.includes(compactName)) return 800;
+
+  // 5. Domain aliases & Industrial equipment synonyms
+  // Paper Machine
+  const isTargetPM =
+    target.includes("pm-01") ||
+    target.includes("pm 01") ||
+    target.includes("paper-machine") ||
+    target.includes("paper machine");
+  const isNodePM =
+    nodeName.includes("paper machine 1") ||
+    nodeName.includes("paper machine #1") ||
+    nodeName.includes("paper machine main") ||
+    nodeName.includes("paper machine mill");
+  if (isTargetPM && isNodePM) return 880;
+
+  // Press Section
+  if (target.includes("press") && nodeName.includes("press")) return 890;
+
+  // Dryer Section
+  if (
+    (target.includes("dryer") || target.includes("drying")) &&
+    (nodeName.includes("dryer") || nodeName.includes("drying"))
+  )
+    return 890;
+
+  // Headbox
+  if (
+    (target.includes("headbox") || target.includes("approach")) &&
+    (nodeName.includes("headbox") || nodeName.includes("approach"))
+  )
+    return 890;
+
+  // Forming / Wire Table
+  if (
+    (target.includes("wire") || target.includes("forming") || target.includes("fourdrinier")) &&
+    (nodeName.includes("wire") || nodeName.includes("forming") || nodeName.includes("fourdrinier"))
+  )
+    return 890;
+
+  // Recovery Boiler
+  if (
+    (target.includes("boiler") || target.includes("recovery")) &&
+    nodeName.includes("recovery boiler")
+  )
+    return 890;
+
+  // Continuous Digester
+  if (target.includes("digester") && nodeName.includes("digester")) return 890;
+
+  // Evaporator
+  if (target.includes("evaporator") && nodeName.includes("evaporator")) return 890;
+
+  // 6. Token overlap
+  const targetWords = normTarget
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        !["unit", "mill", "plant", "main", "step", "section"].includes(w),
+    );
+  const nodeWords = normName.split(/\s+/).filter((w) => w.length > 2);
+  let overlapCount = 0;
+  for (const tw of targetWords) {
+    if (nodeWords.some((nw) => nw.includes(tw) || tw.includes(nw))) {
+      overlapCount++;
+    }
+  }
+  if (overlapCount > 0 && targetWords.length > 0) {
+    return Math.round((overlapCount / targetWords.length) * 500);
+  }
+
+  return 0;
+}
+
+function searchAssetWithLineage(
+  nodes: BackendAsset[],
+  target: string,
+  currentAncestors: BackendAsset[] = [],
+): FoundHierarchyMatch | null {
+  let highestMatch: FoundHierarchyMatch | null = null;
+
+  for (const n of nodes) {
+    const score = computeAssetMatchScore(n, target);
+    if (score > 0) {
+      if (!highestMatch || score > highestMatch.score) {
+        highestMatch = { node: n, ancestors: currentAncestors, score };
+      }
+    }
+
+    if (n.childrens && n.childrens.length > 0) {
+      const childResult = searchAssetWithLineage(
+        n.childrens,
+        target,
+        [...currentAncestors, n],
+      );
+      if (childResult && (!highestMatch || childResult.score > highestMatch.score)) {
+        highestMatch = childResult;
+      }
+    }
+  }
+
+  return highestMatch;
+}
+
 const formatLocalTime = (utcString: string) => {
   if (!utcString) return "-";
   return new Date(utcString + "Z").toLocaleString("en-IN");
@@ -381,6 +518,16 @@ const AssetTreeNode: React.FC<NodeProps> = ({
   const hasChildren = asset.childrens.length > 0;
   const isSelected = asset.assetId === selectedId;
   const isExpanded = expandedMap[asset.assetId] ?? false;
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (isSelected && rowRef.current) {
+      const timer = setTimeout(() => {
+        rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isSelected]);
 
   const expandAll = (node: BackendAsset, map: Record<string, boolean>) => {
     map[node.assetId] = true;
@@ -423,11 +570,13 @@ const AssetTreeNode: React.FC<NodeProps> = ({
   return (
     <div>
       <div
+        ref={rowRef}
+        id={`asset-node-${asset.assetId}`}
         onClick={handleRowClick}
         className={[
           "group flex items-center justify-between gap-1 px-2 py-1.5 cursor-pointer rounded-md transition-all duration-150",
           isSelected
-            ? "bg-primary/10 text-primary"
+            ? "bg-primary/10 text-primary ring-1 ring-primary/40 font-semibold"
             : "hover:bg-accent/60 text-foreground/80 hover:text-foreground",
           asset.isDeleted ? "opacity-40" : "",
         ].join(" ")}
@@ -650,32 +799,71 @@ export default function AssetHierarchyPage({
 
   const [searchParams] = useSearchParams();
 
-  // Auto-select asset when navigated with ?selectedAsset=... or ?assetId=...
-  useEffect(() => {
-    const target = searchParams.get("selectedAsset") || searchParams.get("assetId");
-    if (!target || assets.length === 0) return;
-
-    const findMatch = (nodes: BackendAsset[]): BackendAsset | null => {
+  // Expand All and Collapse All helpers
+  const handleExpandAll = useCallback(() => {
+    const next: Record<string, boolean> = {};
+    const recurse = (nodes: BackendAsset[]) => {
       for (const n of nodes) {
-        if (
-          n.assetId.toLowerCase() === target.toLowerCase() ||
-          n.name.toLowerCase().includes(target.toLowerCase()) ||
-          target.toLowerCase().includes(n.name.toLowerCase())
-        ) {
-          return n;
+        next[n.assetId] = true;
+        if (n.childrens && n.childrens.length > 0) {
+          recurse(n.childrens);
         }
-        const childMatch = findMatch(n.childrens);
-        if (childMatch) return childMatch;
       }
-      return null;
     };
+    recurse(assets);
+    setExpandedMap(next);
+  }, [assets]);
 
-    const matched = findMatch(assets);
-    if (matched) {
-      setSelectedAsset(matched);
+  const handleCollapseAll = useCallback(() => {
+    setExpandedMap({});
+  }, []);
+
+  // 1. Initial default expansion: auto-expand Plant (L1) and Departments (L2) so tree is never collapsed on open
+  useEffect(() => {
+    if (assets.length === 0) return;
+    setExpandedMap((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const initial: Record<string, boolean> = {};
+      const expandTopLevels = (nodes: BackendAsset[], depth: number) => {
+        for (const n of nodes) {
+          if (depth <= 2 || n.level <= 2) {
+            initial[n.assetId] = true;
+            if (n.childrens && n.childrens.length > 0) {
+              expandTopLevels(n.childrens, depth + 1);
+            }
+          }
+        }
+      };
+      expandTopLevels(assets, 1);
+      return initial;
+    });
+  }, [assets]);
+
+  // 2. Auto-select and auto-unfold asset hierarchy when navigated with ?selectedAsset=... or ?assetId=...
+  useEffect(() => {
+    const rawTarget = searchParams.get("selectedAsset") || searchParams.get("assetId");
+    if (!rawTarget || assets.length === 0) return;
+
+    const target = decodeURIComponent(rawTarget).trim();
+    const matchedResult = searchAssetWithLineage(assets, target);
+
+    if (matchedResult) {
+      setSelectedAsset(matchedResult.node);
+
       setExpandedMap((prev) => {
-        const next = { ...prev, [matched.assetId]: true };
-        if (matched.parentId) next[matched.parentId] = true;
+        const next = { ...prev };
+        // Unfold EVERY ancestor from plant root down to this asset
+        for (const anc of matchedResult.ancestors) {
+          next[anc.assetId] = true;
+        }
+        // Unfold the matched node itself
+        next[matchedResult.node.assetId] = true;
+        // Unfold immediate children so sub-components (rolls, sensors, motors) are visible
+        if (matchedResult.node.childrens?.length > 0) {
+          for (const child of matchedResult.node.childrens) {
+            next[child.assetId] = true;
+          }
+        }
         return next;
       });
     }
@@ -1160,7 +1348,25 @@ export default function AssetHierarchyPage({
                   ({treeWidth}px)
                 </span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                  onClick={handleExpandAll}
+                  title="Expand all hierarchy levels"
+                >
+                  Expand
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                  onClick={handleCollapseAll}
+                  title="Collapse all hierarchy levels"
+                >
+                  Collapse
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1168,7 +1374,7 @@ export default function AssetHierarchyPage({
                   onClick={toggleExpandTree}
                   title={treeWidth > 380 ? "Shrink Tree Width (280px)" : "Expand Tree Width (520px)"}
                 >
-                  {treeWidth > 380 ? "◀ Shrink" : "Expand ▶"}
+                  {treeWidth > 380 ? "◀" : "▶"}
                 </Button>
               </div>
             </div>

@@ -404,6 +404,7 @@ export const NotificationList = () => {
                           size="sm"
                           onClick={() =>
                             setSelectedAlertForGraph({
+                              assetId: data.assetId,
                               assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
                               signalName: data.signal || "Operational Variable",
                               severity: isHigh ? "Critical" : "Medium",

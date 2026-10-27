@@ -31,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 
 export interface AssetTelemetryAlertData {
   alertId?: string;
+  assetId?: string;
   assetName: string;
   signalName: string;
   severity: string;
@@ -181,7 +182,8 @@ function TelemetryModalContent({
   const handleNavigateToAssetTree = () => {
     onClose();
     const queryAsset = encodeURIComponent(alert.assetName);
-    navigate(`/assets?selectedAsset=${queryAsset}`);
+    const queryId = alert.assetId ? `&assetId=${encodeURIComponent(alert.assetId)}` : "";
+    navigate(`/assets?selectedAsset=${queryAsset}${queryId}`);
   };
 
   return (

@@ -298,6 +298,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                           onClick={() => {
                             onOpenChange(false);
                             setSelectedAlertForGraph({
+                              assetId: data.assetId,
                               assetName: data.asset || notif.title || "PM-01-PAPER-MACHINE",
                               signalName: data.signal || "Operational Variable",
                               severity: isHigh ? "Critical" : "Medium",
