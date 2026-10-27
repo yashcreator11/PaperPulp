@@ -67,6 +67,7 @@ import RcaModal, { type AlertRcaData } from "@/components/RcaModal";
 import AssetTelemetryGraphModal, {
   type AssetTelemetryAlertData,
 } from "@/components/AssetTelemetryGraphModal";
+import LiveAssetTelemetryMonitor from "@/components/LiveAssetTelemetryMonitor";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAuth } from "@/context/AuthContext";
 import levelToType from "./mapBackendAsset";
@@ -1738,7 +1739,16 @@ export default function AssetHierarchyPage({
                   <Spinner />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+                <div className="space-y-6">
+                  {/* Real-time Asset Telemetry Monitor with Live Values, Deviation Tracking & Anomaly Spike */}
+                  <LiveAssetTelemetryMonitor
+                    asset={selectedAsset}
+                    mappings={existingMappings}
+                    onOpenGraph={(alertData) => setSelectedGraphAlert(alertData)}
+                    onOpenRca={(alertData) => setSelectedRcaAlert(alertData)}
+                  />
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
                   <div className="space-y-5 min-w-0">
                     {deviceDetails.length > 0 && (
                       <div className="rounded-xl border-2 border-emerald-400 dark:border-emerald-600 bg-gradient-to-br from-emerald-100 to-green-50 dark:from-emerald-900/60 dark:to-green-950/60 p-4 shadow-sm shadow-emerald-100 dark:shadow-emerald-900/30">
@@ -1964,7 +1974,8 @@ export default function AssetHierarchyPage({
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
               <div ref={recommendationRef}>
                 {(aiLoading || recommendation) && (
