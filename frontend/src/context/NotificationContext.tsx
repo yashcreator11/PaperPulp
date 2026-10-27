@@ -9,6 +9,7 @@ import {
   getMyNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  createNotification,
   type UserNotification,
 } from "@/api/assetApi";
 
@@ -487,6 +488,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (options.status !== "NORMAL") {
       setUnreadCount(prev => prev + 1);
     }
+
+    // 5. Asynchronously persist to backend SQL Database if available
+    createNotification({
+      title: newNotif.title,
+      text: newNotif.text,
+      priority: options.status === "HIGH" ? 2 : 1,
+    }).catch(() => {
+      // Gracefully falls back to localStorage when backend DB is offline
+    });
   };
 
   return (

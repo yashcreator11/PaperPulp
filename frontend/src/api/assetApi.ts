@@ -460,6 +460,19 @@ export const acknowledgeNotification = async (id: string) => {
   }
 };
 
+export const createNotification = async (payload: { title: string; text: string; priority?: number }) => {
+  try {
+    const res = await apiAsset.post("/Notifications/send", {
+      title: payload.title,
+      text: payload.text,
+      priority: payload.priority ?? 1,
+    });
+    return res.data;
+  } catch (err) {
+    throw handleApiError(err, "Failed to send notification to database");
+  }
+};
+
 /* --------------------------------------------------------
     REPORT APIS
 -------------------------------------------------------- */
