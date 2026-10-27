@@ -319,7 +319,7 @@ export const NotificationList = () => {
                         </div>
                         {!notif.isRead && (
                           <button
-                            onClick={() => markRead(notif.recipientId || notif.id)}
+                            onClick={() => markRead(notif.recipientId || notif.notificationId || (notif as any).id)}
                             className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
                           >
                             <Eye className="w-3.5 h-3.5" />

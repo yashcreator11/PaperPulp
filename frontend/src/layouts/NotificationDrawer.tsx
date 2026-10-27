@@ -231,11 +231,11 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ open, on
                           <span>{timeLabel}</span>
                           {!notif.isRead && (
                             <button
-                              onClick={() => markRead(notif.recipientId || notif.id)}
-                              className="p-1 hover:text-primary transition"
+                              onClick={() => markRead(notif.recipientId || notif.notificationId || (notif as any).id)}
+                              className="p-1 hover:text-primary text-muted-foreground hover:bg-muted rounded transition"
                               title="Mark as read"
                             >
-                              <Eye className="w-3 h-3" />
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>

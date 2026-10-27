@@ -348,12 +348,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   =================================================== */
   const markRead = async (id: string) => {
     try {
-      await markNotificationAsRead(id);
+      const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isGuid) {
+        await markNotificationAsRead(id);
+      }
     } catch {}
 
     const stored = getStoredNotifications();
     const updated = stored.map(n =>
-      (n.notificationId === id || n.recipientId === id)
+      (n.notificationId === id || n.recipientId === id || (n as any).id === id)
         ? { ...n, isRead: true, readAt: new Date().toISOString() }
         : n
     );
@@ -361,9 +364,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     setRendered(prev =>
       activeTab === "unread"
-        ? prev.filter(n => n.notificationId !== id && n.recipientId !== id)
+        ? prev.filter(n => n.notificationId !== id && n.recipientId !== id && (n as any).id !== id)
         : prev.map(n =>
-            (n.notificationId === id || n.recipientId === id)
+            (n.notificationId === id || n.recipientId === id || (n as any).id === id)
               ? { ...n, isRead: true, readAt: new Date().toISOString() }
               : n
           )
