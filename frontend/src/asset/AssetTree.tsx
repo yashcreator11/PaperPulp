@@ -20,6 +20,7 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  ChevronsUpDown,
   Link2,
   Unplug,
   Activity,
@@ -825,6 +826,8 @@ export default function AssetHierarchyPage({
     setExpandedMap({});
   }, []);
 
+  const isAnyExpanded = useMemo(() => Object.keys(expandedMap).length > 0, [expandedMap]);
+
   // 1. Initial default expansion: auto-expand Plant (L1) and Departments (L2) so tree is never collapsed on open
   useEffect(() => {
     if (assets.length === 0) return;
@@ -1582,29 +1585,21 @@ export default function AssetHierarchyPage({
                   Asset Hierarchy
                 </span>
               </div>
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/70"
-                  onClick={handleExpandAll}
-                  title="Expand all hierarchy levels"
+                  className="h-6 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1"
+                  onClick={isAnyExpanded ? handleCollapseAll : handleExpandAll}
+                  title={isAnyExpanded ? "Collapse all hierarchy levels" : "Expand all hierarchy levels"}
                 >
-                  Expand
+                  <ChevronsUpDown className="h-3 w-3" />
+                  {isAnyExpanded ? "Collapse All" : "Expand All"}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/70"
-                  onClick={handleCollapseAll}
-                  title="Collapse all hierarchy levels"
-                >
-                  Collapse
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-1.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted/70"
                   onClick={toggleExpandTree}
                   title={treeWidth > 380 ? "Collapse panel width" : "Expand panel width"}
                 >
