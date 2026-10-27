@@ -1075,9 +1075,27 @@ export default function AssetHierarchyPage({
 
   const SIGNAL_POLL_MS = 5000;
   const ALERT_POLL_MS = 2000;
+  const isBackendOfflineRef = useRef(false);
+  const consecutiveNetErrorsRef = useRef(0);
 
   const fetchSignalsAndDevices = useCallback(async (assetId: string) => {
     try {
+      if (isBackendOfflineRef.current) {
+        const mockData = MOCK_MAPPINGS[assetId] || [];
+        const mapped: AssetConfig[] = mockData.map((d: any) => ({
+          ...d,
+          createdAt: new Date(d.createdAt),
+        }));
+        setAssetConfig(mapped);
+        const uniqueIds = Array.from(new Set(mapped.map((d: AssetConfig) => d.deviceId)));
+        const names = uniqueIds.map((id) => {
+          const dev = MOCK_DEVICES.find((m) => m.id === id);
+          return dev?.name || "Industrial Sensor Node";
+        });
+        setDeviceDetails(names);
+        return;
+      }
+
       const data = await getMappingById(assetId);
       const mapped: AssetConfig[] = data.map((d: any) => ({
         ...d,
@@ -1098,18 +1116,54 @@ export default function AssetHierarchyPage({
         }),
       );
       setDeviceDetails(names);
+      consecutiveNetErrorsRef.current = 0;
     } catch {
-      setAssetConfig(null);
-      setDeviceDetails([]);
+      consecutiveNetErrorsRef.current += 1;
+      if (consecutiveNetErrorsRef.current >= 2) {
+        isBackendOfflineRef.current = true;
+        if (signalPollRef.current) {
+          clearInterval(signalPollRef.current);
+          signalPollRef.current = null;
+        }
+      }
+      const mockData = MOCK_MAPPINGS[assetId] || [];
+      const mapped: AssetConfig[] = mockData.map((d: any) => ({
+        ...d,
+        createdAt: new Date(d.createdAt),
+      }));
+      setAssetConfig(mapped);
+      const uniqueIds = Array.from(new Set(mapped.map((d: AssetConfig) => d.deviceId)));
+      const names = uniqueIds.map((id) => {
+        const dev = MOCK_DEVICES.find((m) => m.id === id);
+        return dev?.name || "Industrial Sensor Node";
+      });
+      setDeviceDetails(names);
     }
   }, []);
 
   const fetchAlerts = useCallback(async (assetId: string) => {
+    if (isBackendOfflineRef.current) {
+      setAlerts([]);
+      return;
+    }
     try {
       const res = await apiAsset.get(`/alerts/asset/${assetId}/pending`);
       const data = res?.data ?? [];
       setAlerts(Array.isArray(data) ? data : []);
-    } catch {
+      consecutiveNetErrorsRef.current = 0;
+    } catch (err: any) {
+      consecutiveNetErrorsRef.current += 1;
+      if (consecutiveNetErrorsRef.current >= 2 || err?.code === "ERR_NETWORK" || err?.message?.includes("Network Error")) {
+        isBackendOfflineRef.current = true;
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        if (signalPollRef.current) {
+          clearInterval(signalPollRef.current);
+          signalPollRef.current = null;
+        }
+      }
       setAlerts([]);
     }
   }, []);
@@ -1118,6 +1172,14 @@ export default function AssetHierarchyPage({
     if (!selectedAsset) return;
     setDevLoading(true);
     try {
+      if (isBackendOfflineRef.current) {
+        setDevices(MOCK_DEVICES as any);
+        const mockMap = Object.values(MOCK_MAPPINGS).flat() as ExistingMapping[];
+        setExistingMappings(
+          mockMap.filter((m) => m.assetId === selectedAsset.assetId),
+        );
+        return;
+      }
       let unmappedData: any[] = [];
       try {
         const unmappedResp = await getUnmappedDevices();
@@ -1138,6 +1200,10 @@ export default function AssetHierarchyPage({
       );
     } catch {
       setDevices(MOCK_DEVICES as any);
+      const mockMap = Object.values(MOCK_MAPPINGS).flat() as ExistingMapping[];
+      setExistingMappings(
+        mockMap.filter((m) => m.assetId === selectedAsset.assetId),
+      );
     } finally {
       setDevLoading(false);
     }
@@ -1160,11 +1226,13 @@ export default function AssetHierarchyPage({
     setDetailLoading(true);
     fetchSignalsAndDevices(id).finally(() => setDetailLoading(false));
     fetchAlerts(id);
-    signalPollRef.current = setInterval(
-      () => fetchSignalsAndDevices(id),
-      SIGNAL_POLL_MS,
-    );
-    pollingRef.current = setInterval(() => fetchAlerts(id), ALERT_POLL_MS);
+    if (!isBackendOfflineRef.current) {
+      signalPollRef.current = setInterval(
+        () => fetchSignalsAndDevices(id),
+        SIGNAL_POLL_MS,
+      );
+      pollingRef.current = setInterval(() => fetchAlerts(id), ALERT_POLL_MS);
+    }
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (signalPollRef.current) clearInterval(signalPollRef.current);

@@ -79,8 +79,10 @@ export default function StartTourButton() {
           const { isTourCompleted } = await getTourStatus();
           backendTourDone = isTourCompleted ? "true" : "false";
           localStorage.setItem(BACKEND_TOUR_KEY, backendTourDone);
-        } catch (err) {
-          console.error("Backend fetch failed:", err);
+        } catch {
+          // In offline mode, default to true to avoid repeating failed network requests on every page navigation
+          backendTourDone = "true";
+          localStorage.setItem(BACKEND_TOUR_KEY, "true");
           return;
         }
       }

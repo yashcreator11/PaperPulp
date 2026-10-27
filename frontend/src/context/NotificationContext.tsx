@@ -101,8 +101,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       } catch {
         setUnreadCount(0);
       }
-    } catch (err) {
-      console.warn("Using offline mode for notifications:", err);
+    } catch {
+      // Seamless offline mode for notifications
       setRendered([]);
       setUnreadCount(0);
     } finally {
@@ -158,6 +158,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       connection = new signalR.HubConnectionBuilder()
         .withUrl(`${apiUrl}/api/asset/hubs/notifications`, { withCredentials: true })
         .withAutomaticReconnect()
+        .configureLogging(signalR.LogLevel.None)
         .build();
 
       connection.start().catch(() => {
