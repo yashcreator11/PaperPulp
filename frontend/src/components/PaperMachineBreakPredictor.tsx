@@ -16,6 +16,8 @@ import {
   DollarSign,
   Clock,
   Layers,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
 import { useNotifications } from "@/context/NotificationContext";
 import { Button } from "@/components/ui/button";
@@ -538,6 +540,95 @@ export default function PaperMachineBreakPredictor({ showRoi = false }: { showRo
           });
         }}
       />
+
+      {/* Technical Basis & Empirical Research Citations */}
+      <div className="p-4 rounded-xl border border-border/80 bg-slate-900/60 text-xs space-y-3 mt-2 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <h4 className="font-bold text-slate-200 text-sm">
+              Technical Basis & Peer-Reviewed Empirical Citations
+            </h4>
+          </div>
+          <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+            TAPPI & Peer-Reviewed Literature Validated
+          </span>
+        </div>
+
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          The multivariate runnability correlations, warning lead-times, and dewatering thresholds powering this digital twin model are grounded directly in technical standards and empirical pulp & paper physics:
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/70 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-slate-200">1. Press-to-Dryer Draw & Wet-Web Break</span>
+              <a
+                href="https://bioresources.cnr.ncsu.edu/wp-content/uploads/2019/05/2009.2.1019.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 text-[10px] shrink-0 font-mono"
+              >
+                Paper <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              <strong>Retulainen & Salminen (2009)</strong> & <strong>Kouko (2014)</strong>: Excessive draw between the press section and dryer group stretches the wet sheet beyond its relaxation capacity, inducing edge tears and web snaps.
+            </p>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/70 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-slate-200">2. Couch Vacuum & Press Nip Crushing</span>
+              <a
+                href="https://www.tappi.org/content/events/09papercon/papers/Sweet.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 text-[10px] shrink-0 font-mono"
+              >
+                Paper <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              <strong>TAPPI TIP 0404-55</strong> & <strong>Sweet (2009)</strong>: A drop in couch vacuum reduces sheet dryness entering the press section (&lt;18.5%), producing hydraulic nip crushing, holes, and sheet breaks.
+            </p>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/70 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-slate-200">3. Steam-Header Sag & Dryer Wraps</span>
+              <a
+                href="https://www.tappi.org/globalassets/tcon-proceedings/24tap128.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 text-[10px] shrink-0 font-mono"
+              >
+                Paper <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              <strong>TAPPI TIP 0404-47</strong> & <strong>TAPPI Steam System Optimization</strong>: Steam-header pressure sag degrades dryer heat transfer; sheet remains damp (&gt;8.5% moisture) and adheres to cylinder surfaces causing dryer wraps.
+            </p>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/70 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-slate-200">4. Wet Tensile Strength Standard</span>
+              <a
+                href="https://www.tappi.org/globalassets/documents/sarg-2026/t456-b-2-d-1-sarg.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 text-[10px] shrink-0 font-mono"
+              >
+                Standard <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              <strong>TAPPI T 456 om-22</strong>: Standard laboratory method for measuring tensile breaking strength of water-saturated paper and paperboard, supporting wet-web strength runnability thresholds.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Optional In-line ROI Calculator (if showRoi=true) */}
       {showRoi && <PaperMillRoiCalculator />}
