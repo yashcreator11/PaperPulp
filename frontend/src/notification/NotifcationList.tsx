@@ -258,13 +258,14 @@ export const NotificationList = () => {
             </p>
           </div>
         ) : (
-          filtered.map((notif: any) => {
+          filtered.map((notif: any, idx: number) => {
             const data = parsePayload(notif);
             const resolved = isResolvedLike(data);
             const isStart = isStartLike(data);
             const isHigh = data?.status === "HIGH";
             const isLow = data?.status === "LOW";
             const timeLabel = timeAgo(data?.timestamp || notif.createdAt);
+            const cardKey = notif.notificationId || notif.recipientId || notif.id || `notif-${idx}`;
 
             /* ------------------ ACTIVE PROCESS ALARM CARD ------------------ */
             if (isStart) {
@@ -273,7 +274,7 @@ export const NotificationList = () => {
 
               return (
                 <div
-                  key={notif.id}
+                  key={cardKey}
                   className={`relative rounded-2xl border p-5 transition-all shadow-sm ${
                     !notif.isRead
                       ? isHigh
@@ -452,7 +453,7 @@ export const NotificationList = () => {
             if (resolved) {
               return (
                 <div
-                  key={notif.id}
+                  key={cardKey}
                   className="relative rounded-2xl border border-emerald-500/30 bg-card p-5 transition-all shadow-sm"
                 >
                   <div className="absolute left-0 top-4 bottom-4 w-1.5 rounded-r bg-emerald-500" />
@@ -489,7 +490,7 @@ export const NotificationList = () => {
             /* ------------------ GENERIC / SYSTEM CARD ------------------ */
             return (
               <div
-                key={notif.id}
+                key={cardKey}
                 className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-2"
               >
                 <div className="flex items-center justify-between">

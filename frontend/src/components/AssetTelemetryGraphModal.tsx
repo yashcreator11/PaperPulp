@@ -26,7 +26,6 @@ import {
   ShieldAlert,
   Sparkles,
   Layers,
-  CheckCircle2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -72,15 +71,18 @@ class GraphErrorBoundary extends Component<{ children: ReactNode; fallback: Reac
   }
 }
 
-export default function AssetTelemetryGraphModal({
-  isOpen,
-  onClose,
+// Inner content component: ONLY mounted when alert is defined and dialog is open.
+// This guarantees that all hooks execute in the exact same order every single render.
+function TelemetryModalContent({
   alert,
+  onClose,
   onOpenRca,
-}: AssetTelemetryGraphModalProps) {
+}: {
+  alert: AssetTelemetryAlertData;
+  onClose: () => void;
+  onOpenRca?: (alert: AssetTelemetryAlertData) => void;
+}) {
   const navigate = useNavigate();
-
-  if (!isOpen || !alert) return null;
 
   // Safe numerical parsing
   const rawObserved = alert.observedValue;
@@ -92,7 +94,6 @@ export default function AssetTelemetryGraphModal({
 
   const unit = alert.unit || "%";
   const sName = (alert.signalName || "").toLowerCase();
-  const isCritical = alert.severity === "Critical" || (alert.deviationPercent ?? 0) > 0;
 
   // Domain knowledge baselines and safe operating ranges
   const { baseline, minThresh, maxThresh, isDownwards } = useMemo(() => {
@@ -116,7 +117,7 @@ export default function AssetTelemetryGraphModal({
       : +(max * 0.55).toFixed(2);
     const base = +(max * 0.82).toFixed(2);
     return { baseline: base, minThresh: min, maxThresh: max, isDownwards: false };
-  }, [sName, alert]);
+  }, [sName, alert.maxThreshold, alert.thresholdValue, alert.minThreshold]);
 
   // Robust, guaranteed mathematical points over last 30 minutes (2-minute intervals)
   const chartData = useMemo(() => {
@@ -184,217 +185,236 @@ export default function AssetTelemetryGraphModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden bg-card border border-border/80 shadow-2xl rounded-2xl z-[200]">
-        {/* Radix Accessible Dialog Header */}
-        <DialogHeader className="p-5 pb-3 border-b border-border/70 bg-gradient-to-r from-muted/40 via-card to-muted/20 text-left">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                <Badge
-                  variant="outline"
-                  className="font-mono text-xs uppercase bg-rose-500/10 text-rose-400 border-rose-500/30"
-                >
-                  Telemetry Anomaly
-                </Badge>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : "Live feed"}
-                </span>
-              </div>
-
-              <DialogTitle className="text-xl font-black text-foreground mt-1 flex items-center gap-2">
-                {alert.signalName} — Deviation Trend
-              </DialogTitle>
-
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Physical Asset: <strong className="text-foreground font-mono">{alert.assetName}</strong>
-              </DialogDescription>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNavigateToAssetTree}
-              className="h-8 text-xs font-semibold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 self-start sm:self-auto shrink-0"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              Open in Asset Tree
-              <ExternalLink className="w-3 h-3 ml-0.5" />
-            </Button>
-          </div>
-
-          {/* KPI Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-border/40 text-xs">
-            <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Observed Value</span>
-              <span className="text-base font-black font-mono text-rose-500">
-                {currentVal} {unit}
-              </span>
-            </div>
-
-            <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Nominal Baseline</span>
-              <span className="text-base font-black font-mono text-emerald-500">
-                {baseline} {unit}
-              </span>
-            </div>
-
-            <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Threshold Band</span>
-              <span className="text-xs font-bold font-mono text-foreground mt-0.5 block">
-                {minThresh} to {maxThresh} {unit}
-              </span>
-            </div>
-
-            <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Variance</span>
-              <span className="text-xs font-bold font-mono text-rose-400 mt-0.5 block">
-                {alert.deviationPercent ? `${alert.deviationPercent > 0 ? "+" : ""}${alert.deviationPercent}%` : "+24.8%"}
-              </span>
-            </div>
-          </div>
-        </DialogHeader>
-
-        {/* Chart Body with Error Boundary Isolation */}
-        <div className="p-5 space-y-3.5">
-          <div className="flex items-center justify-between text-xs">
+    <DialogContent className="max-w-3xl p-0 overflow-hidden bg-card border border-border/80 shadow-2xl rounded-2xl z-[200]">
+      {/* Radix Accessible Dialog Header */}
+      <DialogHeader className="p-5 pb-3 border-b border-border/70 bg-gradient-to-r from-muted/40 via-card to-muted/20 text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-400" />
-              <span className="font-semibold text-foreground">30-Minute High-Resolution Telemetry Replay</span>
-              <span className="text-muted-foreground font-mono text-[11px]">(2-min intervals)</span>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] font-mono">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 bg-emerald-500 rounded inline-block" /> Nominal Baseline
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+              <Badge
+                variant="outline"
+                className="font-mono text-xs uppercase bg-rose-500/10 text-rose-400 border-rose-500/30"
+              >
+                Telemetry Anomaly
+              </Badge>
+              <span className="text-xs text-muted-foreground font-mono">
+                {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : "Live feed"}
               </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 bg-rose-500 rounded inline-block" /> Threshold Limit
-              </span>
             </div>
+
+            <DialogTitle className="text-xl font-black text-foreground mt-1 flex items-center gap-2">
+              {alert.signalName} — Deviation Trend
+            </DialogTitle>
+
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              Physical Asset: <strong className="text-foreground font-mono">{alert.assetName}</strong>
+            </DialogDescription>
           </div>
 
-          <div className="h-64 w-full bg-slate-950/90 rounded-xl p-3 border border-slate-800 shadow-inner">
-            <GraphErrorBoundary
-              fallback={
-                <div className="h-full flex flex-col items-center justify-center text-center p-4 text-slate-400 space-y-2">
-                  <Activity className="w-8 h-8 text-rose-400" />
-                  <p className="text-xs">Live Telemetry Reading: {currentVal} {unit}</p>
-                  <p className="text-[11px] text-slate-500">Threshold: {maxThresh} {unit} (Exceeded by +24.8%)</p>
-                </div>
-              }
-            >
-              <ResponsiveContainer width="100%" height={230}>
-                <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="telemetryGradSafe" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isDownwards ? "#38bdf8" : "#f43f5e"} stopOpacity={0.6} />
-                      <stop offset="95%" stopColor={isDownwards ? "#38bdf8" : "#f43f5e"} stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
-                  <XAxis dataKey="tMinus" stroke="#64748b" fontSize={11} tickLine={false} />
-                  <YAxis
-                    stroke="#64748b"
-                    fontSize={11}
-                    tickLine={false}
-                    domain={[yMin, yMax]}
-                    tickFormatter={(val) => `${val}`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderColor: "#334155",
-                      borderRadius: "8px",
-                      color: "#f8fafc",
-                      fontSize: "12px",
-                    }}
-                    formatter={(val: any) => [`${val} ${unit}`, "Measured Value"]}
-                    labelFormatter={(lbl) => `Interval: ${lbl}`}
-                  />
-                  <ReferenceLine
-                    y={maxThresh}
-                    stroke="#f43f5e"
-                    strokeDasharray="4 4"
-                    strokeWidth={1.5}
-                    label={{ value: `Max: ${maxThresh}`, fill: "#f43f5e", fontSize: 10, position: "top" }}
-                  />
-                  <ReferenceLine
-                    y={minThresh}
-                    stroke={isDownwards ? "#f43f5e" : "#94a3b8"}
-                    strokeDasharray="4 4"
-                    strokeWidth={1.5}
-                    label={{ value: `Min: ${minThresh}`, fill: isDownwards ? "#f43f5e" : "#94a3b8", fontSize: 10, position: "bottom" }}
-                  />
-                  <ReferenceLine
-                    y={baseline}
-                    stroke="#10b981"
-                    strokeDasharray="2 2"
-                    label={{ value: `Base: ${baseline}`, fill: "#10b981", fontSize: 10, position: "left" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke={isDownwards ? "#38bdf8" : "#f43f5e"}
-                    strokeWidth={2.5}
-                    fill="url(#telemetryGradSafe)"
-                    dot={{ r: 2.5, fill: isDownwards ? "#38bdf8" : "#f43f5e" }}
-                    activeDot={{ r: 5, fill: "#f43f5e", stroke: "#ffffff", strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </GraphErrorBoundary>
-          </div>
-
-          {/* Operational Advisory Callout */}
-          <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
-            <div className="text-xs text-foreground/90 leading-relaxed">
-              <strong className="text-rose-400">Deviation Diagnostic: </strong>
-              {alert.message ||
-                `Signal ${alert.signalName} is exhibiting out-of-spec drift on ${alert.assetName}. Threshold was breached and is currently at peak deviation.`}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-border/70 bg-muted/20 flex flex-wrap items-center justify-between gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={handleNavigateToAssetTree}
-            className="text-xs font-semibold gap-1.5"
+            className="h-8 text-xs font-semibold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 self-start sm:self-auto shrink-0"
           >
-            <Layers className="w-3.5 h-3.5 text-primary" />
-            Navigate to {alert.assetName} in Asset Tree
+            <Layers className="w-3.5 h-3.5" />
+            Open in Asset Tree
+            <ExternalLink className="w-3 h-3 ml-0.5" />
           </Button>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Close
-            </Button>
+        {/* KPI Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-border/40 text-xs">
+          <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Observed Value</span>
+            <span className="text-base font-black font-mono text-rose-500">
+              {currentVal} {unit}
+            </span>
+          </div>
 
-            {onOpenRca && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  onClose();
-                  onOpenRca(alert);
-                }}
-                className="text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Investigate with AI RCA
-              </Button>
-            )}
+          <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Nominal Baseline</span>
+            <span className="text-base font-black font-mono text-emerald-500">
+              {baseline} {unit}
+            </span>
+          </div>
+
+          <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Threshold Band</span>
+            <span className="text-xs font-bold font-mono text-foreground mt-0.5 block">
+              {minThresh} to {maxThresh} {unit}
+            </span>
+          </div>
+
+          <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Variance</span>
+            <span className="text-xs font-bold font-mono text-rose-400 mt-0.5 block">
+              {alert.deviationPercent ? `${alert.deviationPercent > 0 ? "+" : ""}${alert.deviationPercent}%` : "+24.8%"}
+            </span>
           </div>
         </div>
-      </DialogContent>
+      </DialogHeader>
+
+      {/* Chart Body with Error Boundary Isolation */}
+      <div className="p-5 space-y-3.5">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span className="font-semibold text-foreground">30-Minute High-Resolution Telemetry Replay</span>
+            <span className="text-muted-foreground font-mono text-[11px]">(2-min intervals)</span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] font-mono">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 bg-emerald-500 rounded inline-block" /> Nominal Baseline
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 bg-rose-500 rounded inline-block" /> Threshold Limit
+            </span>
+          </div>
+        </div>
+
+        <div className="h-64 w-full bg-slate-950/90 rounded-xl p-3 border border-slate-800 shadow-inner">
+          <GraphErrorBoundary
+            fallback={
+              <div className="h-full flex flex-col items-center justify-center text-center p-4 text-slate-400 space-y-2">
+                <Activity className="w-8 h-8 text-rose-400" />
+                <p className="text-xs">Live Telemetry Reading: {currentVal} {unit}</p>
+                <p className="text-[11px] text-slate-500">Threshold: {maxThresh} {unit} (Exceeded by +24.8%)</p>
+              </div>
+            }
+          >
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="telemetryGradSafe" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isDownwards ? "#38bdf8" : "#f43f5e"} stopOpacity={0.6} />
+                    <stop offset="95%" stopColor={isDownwards ? "#38bdf8" : "#f43f5e"} stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
+                <XAxis dataKey="tMinus" stroke="#64748b" fontSize={11} tickLine={false} />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={11}
+                  tickLine={false}
+                  domain={[yMin, yMax]}
+                  tickFormatter={(val) => `${val}`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#0f172a",
+                    borderColor: "#334155",
+                    borderRadius: "8px",
+                    color: "#f8fafc",
+                    fontSize: "12px",
+                  }}
+                  formatter={(val: any) => [`${val} ${unit}`, "Measured Value"]}
+                  labelFormatter={(lbl) => `Interval: ${lbl}`}
+                />
+                <ReferenceLine
+                  y={maxThresh}
+                  stroke="#f43f5e"
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  label={{ value: `Max: ${maxThresh}`, fill: "#f43f5e", fontSize: 10, position: "top" }}
+                />
+                <ReferenceLine
+                  y={minThresh}
+                  stroke={isDownwards ? "#f43f5e" : "#94a3b8"}
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  label={{ value: `Min: ${minThresh}`, fill: isDownwards ? "#f43f5e" : "#94a3b8", fontSize: 10, position: "bottom" }}
+                />
+                <ReferenceLine
+                  y={baseline}
+                  stroke="#10b981"
+                  strokeDasharray="2 2"
+                  label={{ value: `Base: ${baseline}`, fill: "#10b981", fontSize: 10, position: "left" }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={isDownwards ? "#38bdf8" : "#f43f5e"}
+                  strokeWidth={2.5}
+                  fill="url(#telemetryGradSafe)"
+                  dot={{ r: 2.5, fill: isDownwards ? "#38bdf8" : "#f43f5e" }}
+                  activeDot={{ r: 5, fill: "#f43f5e", stroke: "#ffffff", strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </GraphErrorBoundary>
+        </div>
+
+        {/* Operational Advisory Callout */}
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-2.5">
+          <ShieldAlert className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
+          <div className="text-xs text-foreground/90 leading-relaxed">
+            <strong className="text-rose-400">Deviation Diagnostic: </strong>
+            {alert.message ||
+              `Signal ${alert.signalName} is exhibiting out-of-spec drift on ${alert.assetName}. Threshold was breached and is currently at peak deviation.`}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Actions */}
+      <div className="p-4 border-t border-border/70 bg-muted/20 flex flex-wrap items-center justify-between gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleNavigateToAssetTree}
+          className="text-xs font-semibold gap-1.5"
+        >
+          <Layers className="w-3.5 h-3.5 text-primary" />
+          Navigate to {alert.assetName} in Asset Tree
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Close
+          </Button>
+
+          {onOpenRca && (
+            <Button
+              size="sm"
+              onClick={() => {
+                onClose();
+                onOpenRca(alert);
+              }}
+              className="text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Investigate with AI RCA
+            </Button>
+          )}
+        </div>
+      </div>
+    </DialogContent>
+  );
+}
+
+// Top-level exported component: Renders Dialog container and conditionally mounts inner content.
+// Never calls hooks conditionally.
+export default function AssetTelemetryGraphModal({
+  isOpen,
+  onClose,
+  alert,
+  onOpenRca,
+}: AssetTelemetryGraphModalProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      {isOpen && alert ? (
+        <TelemetryModalContent
+          alert={alert}
+          onClose={onClose}
+          onOpenRca={onOpenRca}
+        />
+      ) : null}
     </Dialog>
   );
 }
