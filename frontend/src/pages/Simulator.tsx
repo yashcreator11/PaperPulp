@@ -45,17 +45,17 @@ export default function SimulatorPage() {
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/95 to-amber-950/40 border border-amber-500/30 p-5 shadow-xl backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-card border border-border/80 shadow-md p-5 backdrop-blur-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
                 <SlidersHorizontal className="w-5 h-5" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
                 Process Telemetry Simulator & Anomaly Studio
               </h1>
-              <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-xs font-mono">
+              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 text-xs font-mono font-bold">
                 TESTBENCH MODE
               </Badge>
             </div>
@@ -71,7 +71,7 @@ export default function SimulatorPage() {
               onClick={resetAllToNominal}
               variant="outline"
               size="sm"
-              className="h-9 px-3 text-xs font-bold gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+              className="h-9 px-3.5 text-xs font-bold gap-1.5 border-emerald-500/50 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/15"
             >
               <RotateCcw className="w-4 h-4" /> Normalize All Sections
             </Button>
@@ -87,29 +87,29 @@ export default function SimulatorPage() {
         </div>
 
         {/* Status Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-border">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span className="text-xs text-muted-foreground">Physics Engine:</span>
+            <span className="text-xs text-muted-foreground font-medium">Physics Engine:</span>
             <span className="text-xs font-bold text-foreground font-mono">1,000ms Ticking</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <Activity className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-xs text-muted-foreground">Active Mill Signals:</span>
-            <span className="text-xs font-bold text-cyan-400 font-mono">
+            <Activity className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span className="text-xs text-muted-foreground font-medium">Active Mill Signals:</span>
+            <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 font-mono">
               {Object.values(signalsByAsset).flat().length} Tags
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-xs text-muted-foreground">Active Disturbances:</span>
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-xs text-muted-foreground font-medium">Active Disturbances:</span>
             <span
-              className={`text-xs font-bold font-mono px-1.5 py-0.2 rounded ${
+              className={`text-xs font-bold font-mono px-2 py-0.5 rounded border ${
                 activeDisturbancesCount > 0
-                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse"
-                  : "bg-emerald-500/20 text-emerald-400"
+                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/40 animate-pulse"
+                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
               }`}
             >
               {activeDisturbancesCount} Alarms
@@ -117,9 +117,9 @@ export default function SimulatorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-xs text-muted-foreground">Plant Status:</span>
-            <span className="text-xs font-bold text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs text-muted-foreground font-medium">Plant Status:</span>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
               {activeDisturbancesCount > 0 ? "Under Disturbance" : "Nominal Steady-State"}
             </span>
           </div>
@@ -145,20 +145,20 @@ export default function SimulatorPage() {
               injectPresetScenario("vacuum_sag");
               setSelectedAssetId("PM-PM1-W01");
             }}
-            className="group cursor-pointer rounded-xl border border-border hover:border-amber-500/60 p-3.5 bg-gradient-to-br from-card to-amber-950/10 hover:shadow-md transition-all space-y-2"
+            className="group cursor-pointer rounded-xl border border-border hover:border-amber-500/60 p-3.5 bg-card hover:bg-amber-500/5 hover:shadow-md transition-all space-y-2"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                 <Wind className="w-4 h-4" /> Wet-End Vacuum Drop
               </span>
-              <Badge variant="outline" className="text-[10px] font-mono border-amber-500/40 text-amber-500">
+              <Badge variant="outline" className="text-[10px] font-mono border-amber-500/40 text-amber-600 dark:text-amber-400 font-bold">
                 -25% Suction
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
               Causes dewatering failure on couch roll, wet sheet sag, and high open-draw tension.
             </p>
-            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-amber-500 group-hover:bg-amber-500/10">
+            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-amber-600 dark:text-amber-400 group-hover:bg-amber-500/15">
               ⚡ Trigger Scenario
             </Button>
           </div>
@@ -169,20 +169,20 @@ export default function SimulatorPage() {
               injectPresetScenario("draw_slip");
               setSelectedAssetId("PM-PM1-P01");
             }}
-            className="group cursor-pointer rounded-xl border border-border hover:border-rose-500/60 p-3.5 bg-gradient-to-br from-card to-rose-950/10 hover:shadow-md transition-all space-y-2"
+            className="group cursor-pointer rounded-xl border border-border hover:border-rose-500/60 p-3.5 bg-card hover:bg-rose-500/5 hover:shadow-md transition-all space-y-2"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-rose-500 flex items-center gap-1.5">
+              <span className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
                 <Zap className="w-4 h-4" /> Press Draw Tension Slip
               </span>
-              <Badge variant="outline" className="text-[10px] font-mono border-rose-500/40 text-rose-500">
+              <Badge variant="outline" className="text-[10px] font-mono border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold">
                 +28% Tension
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
               Simulates sectional speed sync mismatch, over-stretching the wet web to rupture point.
             </p>
-            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-rose-500 group-hover:bg-rose-500/10">
+            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-rose-600 dark:text-rose-400 group-hover:bg-rose-500/15">
               ⚡ Trigger Scenario
             </Button>
           </div>
@@ -193,20 +193,20 @@ export default function SimulatorPage() {
               injectPresetScenario("steam_sag");
               setSelectedAssetId("CR-CR3-F01");
             }}
-            className="group cursor-pointer rounded-xl border border-border hover:border-cyan-500/60 p-3.5 bg-gradient-to-br from-card to-cyan-950/10 hover:shadow-md transition-all space-y-2"
+            className="group cursor-pointer rounded-xl border border-border hover:border-cyan-500/60 p-3.5 bg-card hover:bg-cyan-500/5 hover:shadow-md transition-all space-y-2"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-cyan-500 flex items-center gap-1.5">
-                <Flame className="w-4 h-4" /> Recovery Steam Pressure Drop
+              <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
+                <Flame className="w-4 h-4" /> Recovery Steam Drop
               </span>
-              <Badge variant="outline" className="text-[10px] font-mono border-cyan-500/40 text-cyan-500">
+              <Badge variant="outline" className="text-[10px] font-mono border-cyan-500/40 text-cyan-600 dark:text-cyan-400 font-bold">
                 -18% Sag
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
               Dryer cylinder thermal quenching: causes sheet dampness and risk of dryer cylinder wrap.
             </p>
-            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-cyan-500 group-hover:bg-cyan-500/10">
+            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-cyan-600 dark:text-cyan-400 group-hover:bg-cyan-500/15">
               ⚡ Trigger Scenario
             </Button>
           </div>
@@ -217,20 +217,20 @@ export default function SimulatorPage() {
               injectPresetScenario("vibration_spike");
               setSelectedAssetId("PM-PM1-R01");
             }}
-            className="group cursor-pointer rounded-xl border border-border hover:border-purple-500/60 p-3.5 bg-gradient-to-br from-card to-purple-950/10 hover:shadow-md transition-all space-y-2"
+            className="group cursor-pointer rounded-xl border border-border hover:border-purple-500/60 p-3.5 bg-card hover:bg-purple-500/5 hover:shadow-md transition-all space-y-2"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
-                <Activity className="w-4 h-4" /> Bearing RMS Vibration Spike
+              <span className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                <Activity className="w-4 h-4" /> Bearing Vibration Spike
               </span>
-              <Badge variant="outline" className="text-[10px] font-mono border-purple-400/40 text-purple-400">
+              <Badge variant="outline" className="text-[10px] font-mono border-purple-500/40 text-purple-600 dark:text-purple-400 font-bold">
                 +35% Spike
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
               Simulates inner raceway spalling and roll mechanical imbalance on high-speed calender/reel.
             </p>
-            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-purple-400 group-hover:bg-purple-500/10">
+            <Button size="sm" variant="ghost" className="h-6 w-full text-[11px] font-bold text-purple-600 dark:text-purple-400 group-hover:bg-purple-500/15">
               ⚡ Trigger Scenario
             </Button>
           </div>
@@ -340,16 +340,16 @@ export default function SimulatorPage() {
                   key={sig.signalId}
                   className={`relative rounded-2xl border p-4 transition-all shadow-sm flex flex-col justify-between space-y-3 ${
                     sig.isPrimarySource
-                      ? "bg-rose-950/25 border-rose-500 ring-1 ring-rose-500/50"
+                      ? "bg-rose-500/10 dark:bg-rose-950/30 border-rose-500 ring-1 ring-rose-500/50"
                       : isCritical
-                      ? "bg-rose-950/20 border-rose-500/60"
+                      ? "bg-rose-500/10 dark:bg-rose-950/25 border-rose-500/60"
                       : isRamping
-                      ? "bg-amber-950/20 border-amber-500/60"
+                      ? "bg-amber-500/10 dark:bg-amber-950/25 border-amber-500/60"
                       : isSettling
-                      ? "bg-teal-950/20 border-teal-500/50"
+                      ? "bg-teal-500/10 dark:bg-teal-950/25 border-teal-500/50"
                       : isWarning
-                      ? "bg-amber-950/15 border-amber-500/40"
-                      : "bg-card border-border/70 hover:border-border"
+                      ? "bg-amber-500/10 dark:bg-amber-950/20 border-amber-500/40"
+                      : "bg-card border-border/80 hover:border-border"
                   }`}
                 >
                   {/* Card Header */}
@@ -367,14 +367,14 @@ export default function SimulatorPage() {
                       variant="outline"
                       className={`text-[9px] uppercase font-mono font-bold tracking-wider shrink-0 ${
                         sig.isPrimarySource
-                          ? "bg-rose-500/20 text-rose-300 border-rose-500 animate-pulse"
+                          ? "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500 animate-pulse"
                           : isCritical
-                          ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/50"
                           : isRamping
-                          ? "bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse"
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/50 animate-pulse"
                           : isSettling
-                          ? "bg-teal-500/20 text-teal-400 border-teal-500/40"
-                          : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                          ? "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/50"
+                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40"
                       }`}
                     >
                       {sig.isPrimarySource
@@ -511,7 +511,7 @@ export default function SimulatorPage() {
             {activeExcursions.map((ex, idx) => (
               <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Badge variant="outline" className="font-mono text-[10px] border-rose-500/40 text-rose-400">
+                  <Badge variant="outline" className="font-mono text-[10px] border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10 font-bold">
                     {ex.isPrimarySource ? "PRIMARY ROOT CAUSE" : "INDUCED CASCADE"}
                   </Badge>
                   <span className="font-bold text-foreground truncate">{ex.assetName}</span>
@@ -520,7 +520,7 @@ export default function SimulatorPage() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-mono font-bold text-rose-500">
+                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
                     {ex.currentValue} {ex.unit} (+{ex.deviationPercent}%)
                   </span>
 
@@ -528,7 +528,7 @@ export default function SimulatorPage() {
                     size="sm"
                     variant="ghost"
                     onClick={() => engagePidControl(ex.assetId, ex.signalId)}
-                    className="h-6 text-[10px] text-teal-400 hover:bg-teal-500/10 gap-1 font-semibold"
+                    className="h-6 text-[10px] text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 gap-1 font-semibold"
                   >
                     <RotateCcw className="w-3 h-3" /> Stabilize
                   </Button>
