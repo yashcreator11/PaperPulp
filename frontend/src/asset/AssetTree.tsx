@@ -93,7 +93,7 @@ export interface BackendAsset {
 
 // ─────────────────────────── Internal Types ──────────────────────────────────
 
-interface ExistingMapping {
+export interface ExistingMapping {
   signalId: string;
   assetId: string;
   deviceId: string;
