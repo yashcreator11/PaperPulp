@@ -4,6 +4,7 @@ export const ROLE_SIDEBAR_ACCESS: Record<string, string[]> = {
   Admin: [
     "dashboard",
     "assets",
+    "simulator",
     "devices",
     "signal",
     "ai",
@@ -12,6 +13,7 @@ export const ROLE_SIDEBAR_ACCESS: Record<string, string[]> = {
   Engineer: [
     "dashboard",
     "assets",
+    "simulator",
     "devices",
     "signal",
     "ai",
@@ -20,6 +22,7 @@ export const ROLE_SIDEBAR_ACCESS: Record<string, string[]> = {
   Operator: [
     "dashboard",
     "assets",
+    "simulator",
     "signal",
     "ai",
   ],
@@ -33,6 +36,7 @@ export const ROLE_SIDEBAR_ACCESS: Record<string, string[]> = {
   Viewer: [
     "dashboard",
     "assets",
+    "simulator",
     "signal",
     "ai",
   ]

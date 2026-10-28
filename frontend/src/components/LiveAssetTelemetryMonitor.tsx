@@ -1,52 +1,24 @@
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Activity,
-  Zap,
-  RotateCcw,
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Sparkles,
-  Gauge,
-  Sliders,
   ArrowUpRight,
   ArrowDownRight,
-  HelpCircle,
-  Network,
+  SlidersHorizontal,
   Share2,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useNotifications } from "@/context/NotificationContext";
 import type { ExistingMapping } from "@/asset/AssetTree";
-import type { Asset, IMapping } from "@/api/assetApi";
-import { getSignalOnAsset } from "@/api/assetApi";
+import type { Asset } from "@/api/assetApi";
 import type { AssetTelemetryAlertData } from "@/components/AssetTelemetryGraphModal";
 import type { AlertRcaData } from "@/components/RcaModal";
-
-export type ProcessPhase = "nominal" | "ramping" | "excursion" | "settling";
-
-interface LiveSignalState {
-  signalId: string;
-  signalName: string;
-  unit: string;
-  currentValue: number;
-  baseline: number;
-  targetValue: number;
-  minThreshold: number;
-  maxThreshold: number;
-  history: number[];
-  status: "normal" | "warning" | "critical";
-  deviationPercent: number;
-  phase: ProcessPhase;
-  rateOfChange: number; // dy/dt in units/sec
-  alarmFired: boolean;
-  // Multi-variable correlation metadata
-  isPrimarySource?: boolean;
-  inducedBy?: string | null;
-  couplingGain?: number;
-  lagRemainingTicks?: number;
-}
+import { useSimulation, type LiveSignalState } from "@/context/SimulationContext";
 
 interface LiveAssetTelemetryMonitorProps {
   asset: Asset;
@@ -57,392 +29,43 @@ interface LiveAssetTelemetryMonitorProps {
 
 export default function LiveAssetTelemetryMonitor({
   asset,
-  mappings,
   onOpenGraph,
   onOpenRca,
 }: LiveAssetTelemetryMonitorProps) {
-  const { triggerAlert } = useNotifications();
-  const [signals, setSignals] = useState<LiveSignalState[]>([]);
-  const [activeDisturbanceSignalId, setActiveDisturbanceSignalId] = useState<string | null>(null);
-  const [showCorrelationInfo, setShowCorrelationInfo] = useState<boolean>(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const navigate = useNavigate();
+  const { signalsByAsset, getSignalsForAsset } = useSimulation();
 
-  // Initialize signals for the selected asset
-  useEffect(() => {
-    let isMounted = true;
+  // Get live signals for this asset from the shared global engine
+  const signals: LiveSignalState[] =
+    signalsByAsset[asset.assetId] || getSignalsForAsset(asset.assetId, asset.name);
 
-    const initSignals = async () => {
-      let rawList: Array<ExistingMapping | IMapping> = mappings.filter(
-        (m) => m.assetId === asset.assetId
-      );
-
-      // If no mappings in current list, fetch or synthesize realistic mill signals
-      if (rawList.length === 0) {
-        try {
-          const fallback = await getSignalOnAsset(asset.assetId);
-          if (isMounted && fallback.length > 0) {
-            rawList = fallback;
-          }
-        } catch {
-          rawList = [];
-        }
-      }
-
-      // If still empty, synthesize paper mill domain specific variables
-      if (rawList.length === 0) {
-        const lowerName = asset.name.toLowerCase();
-        if (lowerName.includes("dryer") || lowerName.includes("steam") || lowerName.includes("boiler")) {
-          rawList = [
-            {
-              signalId: `sig-${asset.assetId}-steam-p`,
-              signalName: `${asset.name} Steam Header Pressure`,
-              unit: "bar",
-              assetId: asset.assetId,
-              deviceId: "dev-dcs-steam",
-              minThreshold: 6.0,
-              maxThreshold: 13.5,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-dryer-temp`,
-              signalName: `${asset.name} Cylinder Surface Temp`,
-              unit: "°C",
-              assetId: asset.assetId,
-              deviceId: "dev-dcs-steam",
-              minThreshold: 105,
-              maxThreshold: 138,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-condensate`,
-              signalName: `${asset.name} Condensate Syphon Flow`,
-              unit: "m³/h",
-              assetId: asset.assetId,
-              deviceId: "dev-dcs-steam",
-              minThreshold: 12,
-              maxThreshold: 28,
-            } as any,
-          ];
-        } else if (lowerName.includes("press") || lowerName.includes("couch") || lowerName.includes("wire") || lowerName.includes("paper")) {
-          rawList = [
-            {
-              signalId: `sig-${asset.assetId}-vacuum`,
-              signalName: `${asset.name} Couch Roll Vacuum`,
-              unit: "kPa",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 45,
-              maxThreshold: 68,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-draw`,
-              signalName: `${asset.name} Press-to-Dryer Draw`,
-              unit: "%",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 1.8,
-              maxThreshold: 3.8,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-torque`,
-              signalName: `${asset.name} Sectional Drive Torque`,
-              unit: "%",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 40,
-              maxThreshold: 85,
-            } as any,
-          ];
-        } else {
-          rawList = [
-            {
-              signalId: `sig-${asset.assetId}-speed`,
-              signalName: `${asset.name} Operating Speed`,
-              unit: "m/min",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 850,
-              maxThreshold: 1150,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-load`,
-              signalName: `${asset.name} Motor Drive Load`,
-              unit: "%",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 35,
-              maxThreshold: 80,
-            } as any,
-            {
-              signalId: `sig-${asset.assetId}-vibration`,
-              signalName: `${asset.name} Bearing RMS Vibration`,
-              unit: "mm/s",
-              assetId: asset.assetId,
-              deviceId: "dev-pm-qcs",
-              minThreshold: 1.2,
-              maxThreshold: 4.5,
-            } as any,
-          ];
-        }
-      }
-
-      if (!isMounted) return;
-
-      const initialStates: LiveSignalState[] = rawList.slice(0, 6).map((item) => {
-        const min = item.minThreshold ?? 10;
-        const max = item.maxThreshold ?? 100;
-        const mid = (min + max) / 2;
-        const history: number[] = [];
-
-        // Pre-populate 20 historical data points around the nominal baseline
-        for (let i = 0; i < 20; i++) {
-          const noise =
-            Math.sin(i / 2) * (max - min) * 0.05 +
-            (Math.random() - 0.5) * (max - min) * 0.03;
-          history.push(Number((mid + noise).toFixed(2)));
-        }
-
-        return {
-          signalId: item.signalId || `sig-${Math.random()}`,
-          signalName: item.signalName || "Operating Parameter",
-          unit: item.unit || (item as any).signalUnit || "",
-          currentValue: history[history.length - 1],
-          baseline: mid,
-          targetValue: mid,
-          minThreshold: min,
-          maxThreshold: max,
-          history,
-          status: "normal",
-          deviationPercent: 0,
-          phase: "nominal",
-          rateOfChange: 0,
-          alarmFired: false,
-          isPrimarySource: false,
-          inducedBy: null,
-          couplingGain: 1.0,
-          lagRemainingTicks: 0,
-        };
-      });
-
-      setSignals(initialStates);
-      setActiveDisturbanceSignalId(null);
-    };
-
-    void initSignals();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [asset.assetId, mappings]);
-
-  // Live dynamic process physics engine with Multi-Variable Cross-Coupling (1000ms loop)
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    timerRef.current = setInterval(() => {
-      setSignals((prevSignals) => {
-        return prevSignals.map((sig) => {
-          const range = sig.maxThreshold - sig.minThreshold || 1;
-          const curr = sig.currentValue;
-          let nextVal = curr;
-          let newPhase = sig.phase;
-          let alarmFired = sig.alarmFired;
-          let lagRemaining = sig.lagRemainingTicks ?? 0;
-
-          // Check if waiting on transport lag delay for coupled secondary reactions
-          if (lagRemaining > 0) {
-            lagRemaining -= 1;
-            // Still in delay phase, keep previous value with slight noise
-            const flutter = (Math.random() - 0.5) * range * 0.015;
-            nextVal = Number((curr + flutter).toFixed(2));
-            return {
-              ...sig,
-              lagRemainingTicks: lagRemaining,
-              currentValue: nextVal,
-              history: [...sig.history.slice(1), nextVal],
-            };
-          }
-
-          if (sig.phase === "nominal") {
-            // Calm harmonic breathing with slight industrial noise
-            const t = Date.now() / 3000;
-            const target = sig.baseline + Math.sin(t) * range * 0.04;
-            const step = (target - curr) * 0.3 + (Math.random() - 0.5) * range * 0.02;
-            nextVal = Number((curr + step).toFixed(2));
-          } else if (sig.phase === "ramping") {
-            // First-Order Exponential Ramp towards excursion target
-            const dist = sig.targetValue - curr;
-            const step = dist * 0.26 + (Math.random() - 0.5) * range * 0.025;
-            nextVal = Number((curr + step).toFixed(2));
-
-            // Check if reached plateau
-            if (Math.abs(sig.targetValue - nextVal) <= range * 0.05) {
-              newPhase = "excursion";
-            }
-
-            // Check if crossing alarm boundary for the first time during ramp
-            if (nextVal > sig.maxThreshold && !alarmFired) {
-              alarmFired = true;
-              triggerAlert({
-                title: sig.isPrimarySource
-                  ? `🚨 ROOT CAUSE ALARM: ${asset.name}`
-                  : `⚠️ INDUCED CROSS-COUPLING: ${asset.name}`,
-                asset: asset.name,
-                signal: sig.signalName,
-                status: "HIGH",
-                value: nextVal,
-                min: sig.minThreshold,
-                max: sig.maxThreshold,
-                unit: sig.unit,
-                percent: Number((((nextVal - sig.baseline) / (sig.baseline || 1)) * 100).toFixed(1)),
-                message: sig.isPrimarySource
-                  ? `Primary process disturbance on ${sig.signalName}. Exceeded safety threshold (${sig.maxThreshold} ${sig.unit}).`
-                  : `Downstream cascade: ${sig.signalName} surged in response to primary disturbance on ${sig.inducedBy}.`,
-              });
-            }
-          } else if (sig.phase === "excursion") {
-            // Hold at peak excursion with turbulence and dynamic flutter
-            const flutter = (Math.random() - 0.5) * range * 0.03;
-            nextVal = Number((sig.targetValue + flutter).toFixed(2));
-          } else if (sig.phase === "settling") {
-            // Closed-loop PID Damped Settling back towards nominal baseline
-            const dist = sig.baseline - curr;
-            const step = dist * 0.28 + (Math.random() - 0.5) * range * 0.015;
-            nextVal = Number((curr + step).toFixed(2));
-
-            // When variable is safely back within nominal baseline window (±4% of range)
-            if (Math.abs(nextVal - sig.baseline) <= range * 0.04) {
-              newPhase = "nominal";
-              alarmFired = false;
-              if (sig.isPrimarySource) {
-                triggerAlert({
-                  title: `✅ Process Stabilized: ${asset.name}`,
-                  asset: asset.name,
-                  signal: sig.signalName,
-                  status: "NORMAL",
-                  value: nextVal,
-                  min: sig.minThreshold,
-                  max: sig.maxThreshold,
-                  unit: sig.unit,
-                  percent: 0,
-                  message: `PID loop successfully recovered ${sig.signalName} and normalized all cross-coupled section variables.`,
-                });
-              }
-            }
-          }
-
-          const rate = Number((nextVal - curr).toFixed(2));
-          const newHistory = [...sig.history.slice(1), nextVal];
-          const deviation = Number(
-            (((nextVal - sig.baseline) / (sig.baseline || 1)) * 100).toFixed(1)
-          );
-
-          // Evaluate operating severity status
-          let status: "normal" | "warning" | "critical" = "normal";
-          if (nextVal > sig.maxThreshold || nextVal < sig.minThreshold) {
-            status = "critical";
-          } else if (
-            nextVal > sig.maxThreshold - range * 0.1 ||
-            nextVal < sig.minThreshold + range * 0.1
-          ) {
-            status = "warning";
-          }
-
-          return {
-            ...sig,
-            currentValue: nextVal,
-            history: newHistory,
-            status,
-            phase: newPhase,
-            deviationPercent: deviation,
-            rateOfChange: rate,
-            alarmFired,
-            lagRemainingTicks: 0,
-          };
-        });
-      });
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [asset.name, triggerAlert]);
-
-  // Inject Process Disturbance with Multi-Variable Cross-Coupling Cascade
-  const handleInjectDisturbance = (primarySignalId: string) => {
-    setActiveDisturbanceSignalId(primarySignalId);
-
-    setSignals((prev) => {
-      const primarySig = prev.find((s) => s.signalId === primarySignalId) || prev[0];
-      if (!primarySig) return prev;
-
-      return prev.map((s, idx) => {
-        const range = s.maxThreshold - s.minThreshold || 1;
-
-        if (s.signalId === primarySignalId) {
-          // Primary Disturbance Root Cause
-          const target = Number((s.maxThreshold + range * 0.28).toFixed(2));
-          return {
-            ...s,
-            phase: "ramping",
-            targetValue: target,
-            isPrimarySource: true,
-            inducedBy: null,
-            alarmFired: false,
-            lagRemainingTicks: 0,
-          };
-        } else {
-          // Downstream Coupled Secondary Reaction (Domino Effect)
-          // 1-2 ticks transport lag to simulate physical fluid / web transit time
-          const lagTicks = idx % 2 === 0 ? 2 : 1;
-          const couplingGain = 0.75 + (idx * 0.08); // Gain between 0.75 and 0.90
-          const coupledTarget = Number((s.maxThreshold + range * 0.18 * couplingGain).toFixed(2));
-
-          return {
-            ...s,
-            phase: "ramping",
-            targetValue: coupledTarget,
-            isPrimarySource: false,
-            inducedBy: primarySig.signalName,
-            couplingGain,
-            alarmFired: false,
-            lagRemainingTicks: lagTicks,
-          };
-        }
-      });
-    });
-  };
-
-  // Engage PID Control across the entire multi-variable section
-  const handleEngagePidControl = () => {
-    setActiveDisturbanceSignalId(null);
-
-    setSignals((prev) =>
-      prev.map((s) => ({
-        ...s,
-        phase: "settling",
-        targetValue: s.baseline,
-        isPrimarySource: false,
-        inducedBy: null,
-      }))
-    );
-  };
-
-  const isAnyDisturbanceActive = signals.some((s) => s.phase === "ramping" || s.phase === "excursion");
-  const isAnySettling = signals.some((s) => s.phase === "settling");
+  const hasExcursion = signals.some((s) => s.status === "critical" || s.phase === "excursion");
+  const hasRamping = signals.some((s) => s.phase === "ramping");
   const primarySignal = signals.find((s) => s.isPrimarySource);
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 space-y-4 shadow-sm">
-      {/* Header with Title and Realistic Dynamic Simulator Controls */}
+      {/* Header: Clean Operational View */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
         <div>
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  hasExcursion ? "bg-rose-400" : hasRamping ? "bg-amber-400" : "bg-emerald-400"
+                }`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  hasExcursion ? "bg-rose-500" : hasRamping ? "bg-amber-500" : "bg-emerald-500"
+                }`}
+              />
             </span>
-            <h3 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-1.5">
+
+            <h3 className="text-sm font-bold text-foreground tracking-tight">
               Live Sensor Telemetry Monitor
             </h3>
+
             <Badge
               variant="outline"
               className="text-[10px] font-mono border-emerald-500/30 text-emerald-500 bg-emerald-500/5"
@@ -450,81 +73,48 @@ export default function LiveAssetTelemetryMonitor({
               OPC-UA / Modbus Live
             </Badge>
 
-            <Badge
-              variant="outline"
-              onClick={() => setShowCorrelationInfo(!showCorrelationInfo)}
-              className="text-[10px] font-mono border-cyan-500/40 text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 cursor-pointer flex items-center gap-1 hover:bg-cyan-500/20 transition-colors"
-            >
-              <Network className="w-3 h-3" /> Multi-Variable Coupling
-            </Badge>
+            {hasExcursion && (
+              <Badge variant="destructive" className="text-[10px] uppercase font-mono animate-pulse">
+                Excursion Alert
+              </Badge>
+            )}
           </div>
+
           <p className="text-xs text-muted-foreground mt-0.5">
-            Process telemetry stream with dynamic first-order physics, cross-signal coupling & PID recovery for {asset.name}
+            Streaming real-time telemetry from plant field transmitters for {asset.name}
           </p>
         </div>
 
-        {/* Global Process Disturbance & PID Controller Controls */}
+        {/* Clean Link to Dedicated Simulator Page */}
         <div className="flex items-center gap-2 shrink-0">
-          {signals.length > 0 && (
-            <>
-              {isAnyDisturbanceActive ? (
-                <Button
-                  size="sm"
-                  onClick={handleEngagePidControl}
-                  className="h-7 text-xs font-bold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm shadow-emerald-950/20 animate-pulse"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Engage PID Control (Stabilize Loop)
-                </Button>
-              ) : isAnySettling ? (
-                <Button
-                  size="sm"
-                  disabled
-                  variant="outline"
-                  className="h-7 text-xs font-semibold gap-1.5 border-teal-500/40 text-teal-600 dark:text-teal-400"
-                >
-                  <Activity className="w-3.5 h-3.5 animate-spin" /> Closed-Loop Settling…
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleInjectDisturbance(signals[0].signalId)}
-                  className="h-7 text-xs font-bold gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-amber-500/20" /> Inject Cascade Disturbance
-                </Button>
-              )}
-            </>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate("/simulator")}
+            className="h-7 text-xs font-semibold gap-1.5 border-border hover:bg-muted text-muted-foreground hover:text-foreground"
+            title="Open Process Simulator to inject test anomalies or adjust signals"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
+            <span>Process Simulator</span>
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </Button>
         </div>
       </div>
 
-      {/* Explanatory Correlation Banner (Collapsible) */}
-      {showCorrelationInfo && (
-        <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-3 text-xs space-y-1.5">
-          <div className="font-bold text-cyan-400 flex items-center gap-1.5">
-            <Share2 className="w-3.5 h-3.5" /> Multi-Variable Cross-Coupling Dynamics (TAPPI TIS 0404-47):
-          </div>
-          <p className="text-muted-foreground leading-relaxed">
-            In physical continuous web production, process variables do not drift in isolation. 
-            When a primary disturbance occurs (e.g., <strong className="text-foreground">Couch Vacuum loss</strong>), 
-            sheet moisture rises, causing downstream <strong className="text-foreground">Press-to-Dryer Draw tension</strong> to surge with a 1–2s transport lag, which subsequently increases <strong className="text-foreground">Sectional Drive Torque</strong>. 
-            Engaging PID control adjusts the primary actuator, naturally stabilizing the entire coupled cascade.
-          </p>
-        </div>
-      )}
-
-      {/* Primary Root Cause Active Banner */}
-      {isAnyDisturbanceActive && primarySignal && (
+      {/* Active Disturbance Banner (if triggered from Simulator) */}
+      {hasExcursion && primarySignal && (
         <div className="rounded-lg border border-rose-500/40 bg-rose-950/20 px-3 py-2 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block" />
-            <span className="font-bold text-rose-400">Primary Disturbance Source:</span>
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block shrink-0" />
+            <span className="font-bold text-rose-400">Primary Root Cause:</span>
             <span className="font-mono text-foreground font-semibold">{primarySignal.signalName}</span>
-            <span className="text-muted-foreground">→ Inducing downstream cascade into coupled variables</span>
+            <span className="text-muted-foreground hidden md:inline">
+              → Inducing downstream cascade into coupled section tags
+            </span>
           </div>
-          <Badge variant="outline" className="text-[10px] border-rose-500/30 text-rose-400 font-mono">
-            Coupled Cascade Active
+
+          <Badge variant="outline" className="text-[10px] border-rose-500/30 text-rose-400 font-mono shrink-0">
+            Active Excursion
           </Badge>
         </div>
       )}
@@ -532,12 +122,10 @@ export default function LiveAssetTelemetryMonitor({
       {/* Signal Telemetry Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {signals.map((sig) => {
-          const isCritical = sig.status === "critical";
+          const isCritical = sig.status === "critical" || sig.phase === "excursion";
           const isWarning = sig.status === "warning";
           const isRamping = sig.phase === "ramping";
-          const isExcursion = sig.phase === "excursion";
           const isSettling = sig.phase === "settling";
-          const isLagging = (sig.lagRemainingTicks ?? 0) > 0;
 
           // Calculate SVG Sparkline coordinates
           const min = Math.min(...sig.history);
@@ -557,7 +145,7 @@ export default function LiveAssetTelemetryMonitor({
               className={`relative rounded-xl border p-3.5 transition-all shadow-sm flex flex-col justify-between ${
                 sig.isPrimarySource
                   ? "bg-gradient-to-br from-rose-950/30 via-card to-rose-950/20 border-rose-500/80 shadow-rose-950/30 ring-1 ring-rose-500/40"
-                  : isCritical || isExcursion
+                  : isCritical
                   ? "bg-gradient-to-br from-rose-950/25 via-card to-rose-950/15 border-rose-500/60 shadow-rose-950/20"
                   : sig.inducedBy
                   ? "bg-gradient-to-br from-amber-950/30 via-card to-amber-950/15 border-amber-500/60 shadow-amber-950/20 ring-1 ring-amber-500/30"
@@ -575,7 +163,7 @@ export default function LiveAssetTelemetryMonitor({
                 className={`absolute left-0 top-3 bottom-3 w-1 rounded-r ${
                   sig.isPrimarySource
                     ? "bg-rose-500 animate-pulse"
-                    : isCritical || isExcursion
+                    : isCritical
                     ? "bg-rose-500"
                     : sig.inducedBy
                     ? "bg-amber-500"
@@ -608,7 +196,7 @@ export default function LiveAssetTelemetryMonitor({
                         ? "bg-rose-500/25 text-rose-300 border-rose-500 animate-pulse"
                         : sig.inducedBy
                         ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                        : isCritical || isExcursion
+                        : isCritical
                         ? "bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse"
                         : isRamping
                         ? "bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse"
@@ -621,11 +209,9 @@ export default function LiveAssetTelemetryMonitor({
                   >
                     {sig.isPrimarySource
                       ? "PRIMARY SOURCE"
-                      : isLagging
-                      ? "TRANSPORT LAG"
                       : sig.inducedBy
                       ? "INDUCED CASCADE"
-                      : isExcursion
+                      : isCritical
                       ? "EXCURSION"
                       : isRamping
                       ? "RAMPING UP"
@@ -650,7 +236,7 @@ export default function LiveAssetTelemetryMonitor({
                   <div className="flex items-baseline gap-1.5">
                     <span
                       className={`text-xl font-black font-mono tracking-tight transition-colors ${
-                        isCritical || isExcursion || sig.isPrimarySource
+                        isCritical || sig.isPrimarySource
                           ? "text-rose-500 dark:text-rose-400"
                           : isRamping || sig.inducedBy
                           ? "text-amber-500 dark:text-amber-400"
@@ -670,7 +256,6 @@ export default function LiveAssetTelemetryMonitor({
 
                   {/* Rate of Change and Deviation */}
                   <div className="flex items-center gap-1.5">
-                    {/* dy/dt indicator */}
                     <span
                       className={`text-[10px] font-mono font-bold px-1 py-0.2 rounded border flex items-center gap-0.5 ${
                         sig.rateOfChange > 0.05
@@ -694,7 +279,7 @@ export default function LiveAssetTelemetryMonitor({
                     <span
                       className={`text-xs font-bold font-mono ${
                         sig.deviationPercent > 0
-                          ? isCritical || isExcursion || sig.isPrimarySource
+                          ? isCritical || sig.isPrimarySource
                             ? "text-rose-500"
                             : "text-amber-500"
                           : "text-emerald-500"
@@ -716,7 +301,7 @@ export default function LiveAssetTelemetryMonitor({
                           <stop
                             offset="0%"
                             stopColor={
-                              sig.isPrimarySource || isCritical || isExcursion
+                              sig.isPrimarySource || isCritical
                                 ? "#f43f5e"
                                 : isRamping || sig.inducedBy
                                 ? "#f59e0b"
@@ -731,7 +316,7 @@ export default function LiveAssetTelemetryMonitor({
                           <stop
                             offset="100%"
                             stopColor={
-                              sig.isPrimarySource || isCritical || isExcursion
+                              sig.isPrimarySource || isCritical
                                 ? "#f43f5e"
                                 : isRamping || sig.inducedBy
                                 ? "#f59e0b"
@@ -748,7 +333,7 @@ export default function LiveAssetTelemetryMonitor({
                       <polyline
                         fill="none"
                         stroke={
-                          sig.isPrimarySource || isCritical || isExcursion
+                          sig.isPrimarySource || isCritical
                             ? "#f43f5e"
                             : isRamping || sig.inducedBy
                             ? "#f59e0b"
@@ -767,79 +352,53 @@ export default function LiveAssetTelemetryMonitor({
                   </div>
                 </div>
 
-                {/* Quick 1-Click Action Bar */}
-                <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-1">
-                  {isRamping || isExcursion || sig.isPrimarySource || sig.inducedBy ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleEngagePidControl}
-                      className="h-6 px-1.5 text-[10px] font-bold text-teal-500 hover:bg-teal-500/10 gap-1"
-                    >
-                      <RotateCcw className="w-3 h-3" /> Stabilize PID
-                    </Button>
-                  ) : isSettling ? (
-                    <span className="text-[10px] font-mono text-teal-500 flex items-center gap-1 font-semibold">
-                      <Activity className="w-3 h-3 animate-pulse" /> Settling…
-                    </span>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleInjectDisturbance(sig.signalId)}
-                      className="h-6 px-1.5 text-[10px] font-bold text-amber-500 hover:bg-amber-500/10 gap-1"
-                    >
-                      <Zap className="w-3 h-3" /> Disturbance
-                    </Button>
-                  )}
+                {/* 1-Click Deep Diagnostics Action Bar */}
+                <div className="pt-2 border-t border-border/50 flex items-center justify-end gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onOpenGraph({
+                        assetName: asset.name,
+                        assetId: asset.assetId,
+                        signalName: sig.signalName,
+                        severity: isCritical || sig.isPrimarySource ? "Critical" : "Medium",
+                        observedValue: sig.currentValue,
+                        thresholdValue: sig.maxThreshold,
+                        minThreshold: sig.minThreshold,
+                        maxThreshold: sig.maxThreshold,
+                        unit: sig.unit,
+                        deviationPercent: sig.deviationPercent,
+                        timestamp: new Date().toISOString(),
+                        message: `Live telemetry monitoring for ${sig.signalName}.`,
+                      })
+                    }
+                    className="h-6 px-2 text-[10px] font-semibold gap-1 text-primary border-border/80 hover:bg-primary/10"
+                  >
+                    <TrendingUp className="w-3 h-3" /> Graph
+                  </Button>
 
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        onOpenGraph({
-                          assetName: asset.name,
-                          assetId: asset.assetId,
-                          signalName: sig.signalName,
-                          severity: isCritical || isExcursion || sig.isPrimarySource ? "Critical" : "Medium",
-                          observedValue: sig.currentValue,
-                          thresholdValue: sig.maxThreshold,
-                          minThreshold: sig.minThreshold,
-                          maxThreshold: sig.maxThreshold,
-                          unit: sig.unit,
-                          deviationPercent: sig.deviationPercent,
-                          timestamp: new Date().toISOString(),
-                          message: `Live telemetry monitoring for ${sig.signalName}.`,
-                        })
-                      }
-                      className="h-6 px-2 text-[10px] font-semibold gap-1 text-primary border-border/80 hover:bg-primary/10"
-                    >
-                      <TrendingUp className="w-3 h-3" /> Graph
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        onOpenRca({
-                          assetName: asset.name,
-                          signalName: sig.signalName,
-                          severity: isCritical || isExcursion || sig.isPrimarySource ? "Critical" : "Medium",
-                          observedValue: sig.currentValue,
-                          thresholdValue: sig.maxThreshold,
-                          unit: sig.unit,
-                          deviationPercent: sig.deviationPercent,
-                          timestamp: new Date().toISOString(),
-                          message: sig.isPrimarySource
-                            ? `Primary process telemetry excursion detected on ${sig.signalName}.`
-                            : `Induced cascade excursion detected on ${sig.signalName} originating from ${sig.inducedBy || "upstream"}.`,
-                        })
-                      }
-                      className="h-6 px-2 text-[10px] font-bold gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
-                    >
-                      <Sparkles className="w-3 h-3" /> AI RCA
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      onOpenRca({
+                        assetName: asset.name,
+                        signalName: sig.signalName,
+                        severity: isCritical || sig.isPrimarySource ? "Critical" : "Medium",
+                        observedValue: sig.currentValue,
+                        thresholdValue: sig.maxThreshold,
+                        unit: sig.unit,
+                        deviationPercent: sig.deviationPercent,
+                        timestamp: new Date().toISOString(),
+                        message: sig.isPrimarySource
+                          ? `Primary process telemetry excursion detected on ${sig.signalName}.`
+                          : `Induced cascade excursion detected on ${sig.signalName} originating from ${sig.inducedBy || "upstream"}.`,
+                      })
+                    }
+                    className="h-6 px-2 text-[10px] font-bold gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+                  >
+                    <Sparkles className="w-3 h-3" /> AI RCA
+                  </Button>
                 </div>
               </div>
             </div>

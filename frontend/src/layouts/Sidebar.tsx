@@ -22,6 +22,7 @@ export default function Sidebar({
   const allowedKeys = ROLE_SIDEBAR_ACCESS[role] ?? [
     "dashboard",
     "assets",
+    "simulator",
     "devices",
     "signal",
     "ai",
@@ -48,7 +49,7 @@ export default function Sidebar({
             {!isCollapsed && (
               <div className="flex flex-col min-w-0">
                 <span className="font-black text-lg tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 dark:from-emerald-400 dark:via-teal-300 dark:to-cyan-300 bg-clip-text text-transparent">
-                  WMIND
+                  PaperPulp
                 </span>
                 <span className="text-[10px] tracking-widest uppercase text-muted-foreground font-bold truncate">
                   Pulp & Paper Mill

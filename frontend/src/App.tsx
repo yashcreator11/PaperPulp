@@ -32,6 +32,8 @@ import NotFound from "./pages/NotFound";
 import ForbiddenRedirect from "./pages/ForbiddenRedirect";
 import Gateways from "./pages/Gateways";
 import AddNodeFrom from "./devices/AddNodeFrom";
+import { SimulationProvider } from "./context/SimulationContext";
+import Simulator from "./pages/Simulator";
 
 export default function App() {
   const [showLoader, setShowLoader] = useState(true);
@@ -68,13 +70,16 @@ export default function App() {
 
             <Route element={
           <NotificationProvider>
-             <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
+            <SimulationProvider>
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            </SimulationProvider>
           </NotificationProvider>
           }>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/assets" element={<Assets />} />
+              <Route path="/simulator" element={<Simulator />} />
               <Route path="/devices" element={<Devices />} />
               <Route path="/devices/add" element={<Navigate to="/devices?action=add" replace />} />
               <Route path="/devices/edit/:deviceId" element={<EditDeviceForm />} />
